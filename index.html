@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catan Statistics Tracker</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"><p style="padding:20px;">Loading... If this stays visible, check browser console (F12) for errors.</p></div>
+    <script type="text/babel">
+const { useState, useMemo, useEffect, useRef } = React;
+
+const DiceChart = ({ chartData }) => {
+    const chartRef = useRef(null);
+    const chartInstance = useRef(null);
+
+    useEffect(() => {
+        if (chartInstance.current) {
+            chartInstance.current.destroy();
+        }
+
+        const ctx = chartRef.current.getContext('2d');
+        chartInstance.current = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartData.map(d => d.roll),
+                datasets: [
+                    {
+                        label: 'Actual %',
+                        data: chartData.map(d => d.Actual),
+                        backgroundColor: '#3b82f6',
+                    },
+                    {
+                        label: 'Theoretical %',
+                        data: chartData.map(d => d.Theoretical),
+                        backgroundColor: '#ef4444',
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 20 }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            afterLabel: (ctx) => {
+                                if (ctx.datasetIndex === 0) {
+                                    return `Count: ${chartData[ctx.dataIndex].count}`;
+                                }
+                                return '';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        return () => {
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
+        };
+    }, [chartData]);
+
+    return (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-2xl font-bold text-amber-800 mb-4">Probability Distribution</h2>
+            <div style={{height: '400px'}}>
+                <canvas ref={chartRef}></canvas>
+            </div>
+        </div>
+    );
+};
+
+const CatanStatsTracker = () => {
+const HEX_SIZE = 40;
+const HEX_WIDTH = HEX_SIZE * Math.sqrt(3);
+const HEX_HEIGHT = HEX_SIZE * 1.5;
+
+const getDefaultHexes = () => [
+{ id: 0, resource: '', number: '', x: 200, y: 80 },
+{ id: 1, resource: '', number: '', x: 200 + HEX_WIDTH, y: 80 },
+{ id: 2, resource: '', number: '', x: 200 + HEX_WIDTH * 2, y: 80 },
+{ id: 3, resource: '', number: '', x: 200 - HEX_WIDTH/2, y: 80 + HEX_HEIGHT },
+{ id: 4, resource: '', number: '', x: 200 + HEX_WIDTH/2, y: 80 + HEX_HEIGHT },
+{ id: 5, resource: '', number: '', x: 200 + HEX_WIDTH * 1.5, y: 80 + HEX_HEIGHT },
+{ id: 6, resource: '', number: '', x: 200 + HEX_WIDTH * 2.5, y: 80 + HEX_HEIGHT },
+{ id: 7, resource: '', number: '', x: 200 - HEX_WIDTH, y: 80 + HEX_HEIGHT * 2 },
+{ id: 8, resource: '', number: '', x: 200, y: 80 + HEX_HEIGHT * 2 },
+{ id: 9, resource: '', number: '', x: 200 + HEX_WIDTH, y: 80 + HEX_HEIGHT * 2 },
+{ id: 10, resource: '', number: '', x: 200 + HEX_WIDTH * 2, y: 80 + HEX_HEIGHT * 2 },
+{ id: 11, resource: '', number: '', x: 200 + HEX_WIDTH * 3, y: 80 + HEX_HEIGHT * 2 },
+{ id: 12, resource: '', number: '', x: 200 - HEX_WIDTH/2, y: 80 + HEX_HEIGHT * 3 },
+{ id: 13, resource: '', number: '', x: 200 + HEX_WIDTH/2, y: 80 + HEX_HEIGHT * 3 },
+{ id: 14, resource: '', number: '', x: 200 + HEX_WIDTH * 1.5, y: 80 + HEX_HEIGHT * 3 },
+{ id: 15, resource: '', number: '', x: 200 + HEX_WIDTH * 2.5, y: 80 + HEX_HEIGHT * 3 },
+{ id: 16, resource: '', number: '', x: 200, y: 80 + HEX_HEIGHT * 4 },
+{ id: 17, resource: '', number: '', x: 200 + HEX_WIDTH, y: 80 + HEX_HEIGHT * 4 },
+{ id: 18, resource: '', number: '', x: 200 + HEX_WIDTH * 2, y: 80 + HEX_HEIGHT * 4 }
+];
+
+const [rolls, setRolls] = useState({2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0});
+const [showBoard, setShowBoard] = useState(false);
+const [isAnalyzing, setIsAnalyzing] = useState(false);
+const [analysisError, setAnalysisError] = useState(null);
+const [hexes, setHexes] = useState(getDefaultHexes());
+const [vertices, setVertices] = useState({});
+const [edges, setEdges] = useState([]);
+const [selectedHex, setSelectedHex] = useState(null);
+const [isLocked, setIsLocked] = useState(false);
+const [settlements, setSettlements] = useState([]);
+const [roads, setRoads] = useState([]);
+const [ports, setPorts] = useState([]);
+const [selectedPlayer, setSelectedPlayer] = useState('red');
+const [placementMode, setPlacementMode] = useState(null);
+const [autoPlaceMode, setAutoPlaceMode] = useState(false);
+const [autoPlaceStep, setAutoPlaceStep] = useState(0);
+
+const autoPlaceSequence = [
+    {type: 'resource', value: 'wood', label: 'Wood', color: '#228B22'},
+    {type: 'resource', value: 'brick', label: 'Brick', color: '#B8433D'},
+    {type: 'resource', value: 'sheep', label: 'Sheep', color: '#90EE90'},
+    {type: 'resource', value: 'wheat', label: 'Wheat', color: '#F4C430'},
+    {type: 'resource', value: 'ore', label: 'Ore', color: '#708090'},
+    {type: 'resource', value: 'desert', label: 'Desert', color: '#D2B48C'},
+    {type: 'number', value: '2', label: '2'},
+    {type: 'number', value: '3', label: '3'},
+    {type: 'number', value: '4', label: '4'},
+    {type: 'number', value: '5', label: '5'},
+    {type: 'number', value: '6', label: '6'},
+    {type: 'number', value: '8', label: '8'},
+    {type: 'number', value: '9', label: '9'},
+    {type: 'number', value: '10', label: '10'},
+    {type: 'number', value: '11', label: '11'},
+    {type: 'number', value: '12', label: '12'},
+];
+
+const playerColors = {red: '#DC2626', blue: '#2563EB', white: '#FFFFFF', orange: '#EA580C', green: '#16A34A', brown: '#92400E'};
+const theoreticalProb = {2: 2.78, 3: 5.56, 4: 8.33, 5: 11.11, 6: 13.89, 7: 16.67, 8: 13.89, 9: 11.11, 10: 8.33, 11: 5.56, 12: 2.78};
+const resourceColors = {wood: '#228B22', brick: '#B8433D', sheep: '#90EE90', wheat: '#F4C430', ore: '#708090', desert: '#D2B48C', '': '#F5F5DC'};
+const portTypes = ['3:1', 'wood', 'brick', 'sheep', 'wheat', 'ore'];
+
+const handleImageUpload = async (e) => {
+const file = e.target.files[0];
+if (!file) return;
+setIsAnalyzing(true);
+setAnalysisError(null);
+try {
+const base64 = await new Promise((res, rej) => {
+const r = new FileReader();
+r.onload = () => res(r.result.split(',')[1]);
+r.onerror = rej;
+r.readAsDataURL(file);
+});
+const response = await fetch('https://api.anthropic.com/v1/messages', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({
+model: 'claude-sonnet-4-20250514',
+max_tokens: 1500,
+messages: [{
+role: 'user',
+content: [
+{ type: 'image', source: { type: 'base64', media_type: file.type, data: base64 } },
+{ type: 'text', text: 'Analyze this Catan board. Return ONLY a JSON array of 19 objects ordered top-left to bottom-right (row1: 3, row2: 4, row3: 5, row4: 4, row5: 3). Each: {"resource":"wood|brick|sheep|wheat|ore|desert","number":"2-12 or empty"}. Example: [{"resource":"ore","number":"10"},...]' }
+]
+}]
+})
+});
+const data = await response.json();
+const text = data.content[0].text;
+const jsonMatch = text.match(/\[[\s\S]*\]/);
+if (!jsonMatch) throw new Error('Parse failed');
+const boardData = JSON.parse(jsonMatch[0]);
+setHexes(hexes.map((hex, i) => i < boardData.length ? {...hex, resource: boardData[i].resource || '', number: String(boardData[i].number || '')} : hex));
+} catch (err) {
+setAnalysisError('Failed to analyze. Try again or enter manually.');
+}
+setIsAnalyzing(false);
+};
+
+const recordRoll = (n) => setRolls(p => ({...p, [n]: p[n] + 1}));
+const resetRolls = () => setRolls({2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0});
+const totalRolls = Object.values(rolls).reduce((a, b) => a + b, 0);
+const chartData = Object.keys(rolls).map(n => ({roll: n, Actual: totalRolls > 0 ? parseFloat((rolls[n] / totalRolls * 100).toFixed(2)) : 0, Theoretical: theoreticalProb[n], count: rolls[n]}));
+
+const potentialHexes = useMemo(() => {
+if (isLocked) return [];
+const occupied = new Set(hexes.map(h => `${h.x.toFixed(2)},${h.y.toFixed(2)}`));
+const potential = new Set();
+hexes.forEach(hex => {
+[{x: hex.x + HEX_WIDTH, y: hex.y}, {x: hex.x - HEX_WIDTH, y: hex.y}, {x: hex.x + HEX_WIDTH/2, y: hex.y + HEX_HEIGHT}, {x: hex.x - HEX_WIDTH/2, y: hex.y + HEX_HEIGHT}, {x: hex.x + HEX_WIDTH/2, y: hex.y - HEX_HEIGHT}, {x: hex.x - HEX_WIDTH/2, y: hex.y - HEX_HEIGHT}].forEach(pos => {
+const key = `${pos.x.toFixed(2)},${pos.y.toFixed(2)}`;
+if (!occupied.has(key)) potential.add(JSON.stringify(pos));
+});
+});
+return Array.from(potential).map(s => JSON.parse(s));
+}, [hexes, isLocked]);
+
+const updateHex = (id, field, val) => {
+const newHexes = hexes.map(h => h.id === id ? {...h, [field]: val} : h);
+setHexes(newHexes);
+if (isLocked) calculateVerticesAndEdges(newHexes);
+};
+
+const addHexAtPosition = (x, y) => {
+const newId = Math.max(...hexes.map(h => h.id), -1) + 1;
+setHexes([...hexes, {id: newId, resource: '', number: '', x, y}]);
+};
+
+const removeHex = (id) => {
+const newHexes = hexes.filter(h => h.id !== id);
+setHexes(newHexes);
+setSelectedHex(null);
+if (isLocked) calculateVerticesAndEdges(newHexes);
+};
+
+const startAutoPlace = () => {
+setAutoPlaceMode(true);
+setAutoPlaceStep(0);
+setSelectedHex(null);
+// Clear all resources and numbers for fresh start
+setHexes(hexes.map(h => ({...h, resource: '', number: ''})));
+};
+
+const handleAutoPlaceClick = (id) => {
+const currentStep = autoPlaceSequence[autoPlaceStep];
+if (currentStep.type === 'resource') {
+    const hex = hexes.find(h => h.id === id);
+    // Toggle: if already this resource, remove it; otherwise set it
+    if (hex.resource === currentStep.value) {
+        setHexes(hexes.map(h => h.id === id ? {...h, resource: ''} : h));
+    } else {
+        setHexes(hexes.map(h => h.id === id ? {...h, resource: currentStep.value} : h));
+    }
+} else {
+    // Number step - only allow on hexes that have a resource (and not desert)
+    const hex = hexes.find(h => h.id === id);
+    if (!hex.resource || hex.resource === 'desert') return;
+    // Toggle: if already this number, remove it; otherwise set it
+    if (hex.number === currentStep.value) {
+        setHexes(hexes.map(h => h.id === id ? {...h, number: ''} : h));
+    } else {
+        setHexes(hexes.map(h => h.id === id ? {...h, number: currentStep.value} : h));
+    }
+}
+};
+
+const autoPlaceNext = () => {
+if (autoPlaceStep < autoPlaceSequence.length - 1) {
+    setAutoPlaceStep(autoPlaceStep + 1);
+} else {
+    // Done with all steps
+    setAutoPlaceMode(false);
+    setAutoPlaceStep(0);
+}
+};
+
+const autoPlaceCancel = () => {
+setAutoPlaceMode(false);
+setAutoPlaceStep(0);
+};
+
+const resetBoard = () => {
+setHexes(getDefaultHexes());
+setSelectedHex(null);
+setAutoPlaceMode(false);
+setAutoPlaceStep(0);
+setIsLocked(false);
+setVertices({});
+setEdges([]);
+setSettlements([]);
+setRoads([]);
+setPorts([]);
+};
+
+const toggleLock = () => {
+const newLock = !isLocked;
+setIsLocked(newLock);
+if (newLock) calculateVerticesAndEdges(hexes);
+else { setVertices({}); setEdges([]); }
+};
+
+const getNumberProbability = (n) => ({2:1,3:2,4:3,5:4,6:5,8:5,9:4,10:3,11:2,12:1}[n] || 0);
+
+const calculateVerticesAndEdges = (hexesData) => {
+const vMap = {}, eSet = new Set();
+hexesData.forEach(hex => {
+const hVerts = [];
+for (let i = 0; i < 6; i++) {
+const ang = (Math.PI / 3) * i - Math.PI / 2;
+const vx = Math.round((hex.x + HEX_SIZE * Math.cos(ang)) * 10) / 10;
+const vy = Math.round((hex.y + HEX_SIZE * Math.sin(ang)) * 10) / 10;
+const key = `${vx.toFixed(1)}_${vy.toFixed(1)}`;
+if (!vMap[key]) vMap[key] = {x: vx, y: vy, points: 0, adjacentHexes: []};
+if (hex.number && hex.resource && hex.resource !== 'desert') {
+const pips = getNumberProbability(parseInt(hex.number));
+vMap[key].points += pips;
+vMap[key].adjacentHexes.push({resource: hex.resource, pips});
+}
+hVerts.push(key);
+}
+for (let i = 0; i < 6; i++) eSet.add([hVerts[i], hVerts[(i+1)%6]].sort().join('|'));
+});
+setVertices(vMap);
+setEdges(Array.from(eSet).map(k => {const [v1,v2] = k.split('|'); return {v1,v2};}));
+};
+
+const getResourceTotals = () => {
+const t = {};
+hexes.forEach(h => {
+if (h.resource && h.resource !== 'desert' && h.number) {
+t[h.resource] = (t[h.resource] || 0) + getNumberProbability(parseInt(h.number));
+}
+});
+return t;
+};
+
+const handleVertexClick = (k) => {
+if (!isLocked || placementMode !== 'settlement') return;
+const ex = settlements.find(s => s.vertex === k);
+setSettlements(ex ? settlements.filter(s => s.vertex !== k) : [...settlements, {vertex: k, player: selectedPlayer}]);
+};
+
+const handleEdgeClick = (e) => {
+if (!isLocked || placementMode !== 'road') return;
+const ek = [e.v1, e.v2].sort().join('|');
+const ex = roads.find(r => r.edge === ek);
+setRoads(ex ? roads.filter(r => r.edge !== ek) : [...roads, {edge: ek, player: selectedPlayer}]);
+};
+
+const handlePortClick = (k) => {
+if (!isLocked || placementMode !== 'port') return;
+const ex = ports.find(p => p.vertex === k);
+setPorts(ex ? ports.filter(p => p.vertex !== k) : [...ports, {vertex: k, type: '3:1'}]);
+};
+
+const updatePortType = (k, t) => setPorts(ports.map(p => p.vertex === k ? {...p, type: t} : p));
+
+const getPlayerStats = () => {
+const stats = {};
+Object.keys(playerColors).forEach(p => { stats[p] = {totalPoints: 0, resources: {wood:0,brick:0,sheep:0,wheat:0,ore:0}}; });
+settlements.forEach(s => {
+const v = vertices[s.vertex];
+if (v) {
+stats[s.player].totalPoints += v.points;
+v.adjacentHexes.forEach(h => { stats[s.player].resources[h.resource] += h.pips; });
+}
+});
+return stats;
+};
+
+const getVertexColor = (p) => {
+const r = p / 15;
+if (r >= 0.8) return '#00C853';
+if (r >= 0.6) return '#64DD17';
+if (r >= 0.4) return '#FFD600';
+if (r >= 0.2) return '#FF6D00';
+return '#DD2C00';
+};
+
+const Hexagon = ({hex, onClick, isPotential, isAutoPlaceHighlight}) => {
+const pts = [];
+for (let i = 0; i < 6; i++) {
+const a = (Math.PI / 3) * i - Math.PI / 2;
+pts.push(`${HEX_SIZE * Math.cos(a)},${HEX_SIZE * Math.sin(a)}`);
+}
+const isRed = hex.number === '6' || hex.number === '8';
+if (isPotential) return (
+<g transform={`translate(${hex.x},${hex.y})`} onClick={onClick} style={{cursor:'pointer'}}>
+<polygon points={pts.join(' ')} fill="none" stroke="#999" strokeWidth="2" strokeDasharray="5,5" opacity="0.5"/>
+<text textAnchor="middle" dy="5" fontSize="24" fill="#999" opacity="0.5">+</text>
+</g>
+);
+const showPointer = !isLocked || autoPlaceMode;
+const strokeColor = isAutoPlaceHighlight ? '#00FF00' : (selectedHex === hex.id ? '#FF6B6B' : '#000');
+const strokeW = isAutoPlaceHighlight ? 4 : (selectedHex === hex.id ? 3 : 1);
+return (
+<g transform={`translate(${hex.x},${hex.y})`} onClick={onClick} style={{cursor: showPointer ? 'pointer' : 'default'}}>
+<polygon points={pts.join(' ')} fill={resourceColors[hex.resource] || resourceColors['']} stroke={strokeColor} strokeWidth={strokeW}/>
+{hex.resource && hex.resource !== 'desert' && hex.number && (<><circle r="18" fill="white"/><text textAnchor="middle" dy="6" fontSize="20" fontWeight="bold" fill={isRed ? '#DC143C' : '#000'}>{hex.number}</text></>)}
+{hex.resource === 'desert' && <text textAnchor="middle" dy="5" fontSize="14" fontWeight="bold" fill="#8B4513">D</text>}
+</g>
+);
+};
+
+return (
+<div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4">
+<div className="max-w-7xl mx-auto">
+<h1 className="text-4xl font-bold text-amber-900 mb-6 text-center">Catan Statistics Tracker</h1>
+<div className="flex gap-4 mb-6 justify-center">
+<button onClick={() => setShowBoard(false)} className={`px-6 py-2 rounded-lg font-semibold transition ${!showBoard ? 'bg-amber-700 text-white' : 'bg-white text-amber-700'}`}>Dice Tracker</button>
+<button onClick={() => setShowBoard(true)} className={`px-6 py-2 rounded-lg font-semibold transition ${showBoard ? 'bg-amber-700 text-white' : 'bg-white text-amber-700'}`}>Board Builder</button>
+</div>
+
+{!showBoard ? (
+<div className="space-y-6">
+<div className="bg-white rounded-lg shadow-lg p-6">
+<div className="flex justify-between items-center mb-4">
+<h2 className="text-2xl font-bold text-amber-800">Record Dice Rolls</h2>
+<div className="flex gap-3 items-center">
+<span className="text-lg font-semibold">Total: {totalRolls}</span>
+<button onClick={resetRolls} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Reset</button>
+</div>
+</div>
+<div className="grid grid-cols-11 gap-2">
+{Object.keys(rolls).map(n => (
+<button key={n} onClick={() => recordRoll(parseInt(n))} className="aspect-square bg-gradient-to-br from-amber-600 to-amber-800 text-white rounded-lg text-2xl font-bold hover:from-amber-700 hover:to-amber-900 shadow-md hover:shadow-lg transform hover:scale-105">{n}</button>
+))}
+</div>
+<div className="grid grid-cols-11 gap-2 mt-2">
+{Object.entries(rolls).map(([n, c]) => <div key={n} className="text-center text-sm font-semibold text-gray-700">{c}</div>)}
+</div>
+</div>
+<DiceChart chartData={chartData} />
+</div>
+) : (
+<div className="space-y-6">
+<div className="bg-white rounded-lg shadow-lg p-6">
+<div className="flex justify-between items-center mb-4">
+<h2 className="text-2xl font-bold text-amber-800">Build Your Board</h2>
+<div className="flex gap-2">
+<button onClick={resetBoard} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold">
+Reset Board
+</button>
+<button onClick={toggleLock} className={`px-6 py-2 rounded-lg font-semibold ${isLocked ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}>
+{isLocked ? 'Unlock' : 'Lock & Calculate'}
+</button>
+</div>
+</div>
+
+{!isLocked && !autoPlaceMode && (
+<div className="mb-4 space-y-3">
+<p className="text-amber-700 font-semibold">Add/remove tiles to set up board shape, then use Auto Place for quick setup.</p>
+<div className="flex gap-3 items-center flex-wrap">
+<button onClick={startAutoPlace} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold">
+Auto Place
+</button>
+<label className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold cursor-pointer">
+Upload Board Photo
+<input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={isAnalyzing}/>
+</label>
+{isAnalyzing && <span className="text-indigo-600 font-semibold animate-pulse">Analyzing...</span>}
+</div>
+{analysisError && <p className="text-red-600 text-sm">{analysisError}</p>}
+</div>
+)}
+
+{autoPlaceMode && (
+<div className="mb-4 p-4 bg-blue-100 border-2 border-blue-400 rounded-lg">
+<div className="flex justify-between items-center mb-3">
+<h3 className="text-xl font-bold text-blue-800">
+Step {autoPlaceStep + 1}/{autoPlaceSequence.length}: {autoPlaceSequence[autoPlaceStep].type === 'resource' ? 'Resources' : 'Numbers'}
+</h3>
+<button onClick={autoPlaceCancel} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded font-semibold text-sm">
+Cancel
+</button>
+</div>
+<p className="text-lg font-semibold mb-3" style={{color: autoPlaceSequence[autoPlaceStep].color || '#1e40af'}}>
+Tap all <span className="text-2xl">{autoPlaceSequence[autoPlaceStep].label}</span> tiles
+{autoPlaceSequence[autoPlaceStep].type === 'number' && <span className="text-sm text-gray-600 ml-2">(only on resource tiles)</span>}
+</p>
+<div className="flex gap-3">
+<button onClick={autoPlaceNext} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold">
+{autoPlaceStep < autoPlaceSequence.length - 1 ? 'Next' : 'Finish'}
+</button>
+<button onClick={autoPlaceNext} className="px-6 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded-lg font-semibold">
+None
+</button>
+</div>
+<div className="mt-2 text-sm text-gray-600">
+Tap tiles to select/deselect. Click Next when done, or None if there are no {autoPlaceSequence[autoPlaceStep].label} tiles.
+</div>
+</div>
+)}
+
+{isLocked && (
+<div className="mb-4 space-y-3">
+<div className="flex gap-2 items-center flex-wrap">
+<span className="font-semibold">Player:</span>
+{Object.entries(playerColors).map(([c, hex]) => (
+<button key={c} onClick={() => setSelectedPlayer(c)} className={`w-10 h-10 rounded-full ${selectedPlayer === c ? 'ring-4 ring-black' : 'ring-2 ring-gray-300'}`} style={{backgroundColor: hex}}/>
+))}
+</div>
+<div className="flex gap-2 flex-wrap">
+<button onClick={() => setPlacementMode(placementMode === 'settlement' ? null : 'settlement')} className={`px-4 py-2 rounded-lg font-semibold ${placementMode === 'settlement' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>Settlement</button>
+<button onClick={() => setPlacementMode(placementMode === 'road' ? null : 'road')} className={`px-4 py-2 rounded-lg font-semibold ${placementMode === 'road' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>Road</button>
+<button onClick={() => setPlacementMode(placementMode === 'port' ? null : 'port')} className={`px-4 py-2 rounded-lg font-semibold ${placementMode === 'port' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>Port</button>
+</div>
+</div>
+)}
+
+<div className="flex flex-col lg:flex-row gap-6">
+<div className="flex-1 bg-amber-50 rounded-lg p-4 border-2 border-amber-300">
+<div style={{width: '100%', height: '600px', overflow: 'auto'}}>
+<svg width="600" height="500" className="mx-auto">
+{!isLocked && !autoPlaceMode && potentialHexes.map((pos, i) => <Hexagon key={`p-${i}`} hex={pos} isPotential onClick={() => addHexAtPosition(pos.x, pos.y)}/>)}
+{hexes.map(hex => {
+const currentStep = autoPlaceSequence[autoPlaceStep];
+const isHighlight = autoPlaceMode && (
+    (currentStep.type === 'resource' && hex.resource === currentStep.value) ||
+    (currentStep.type === 'number' && hex.number === currentStep.value)
+);
+const handleClick = () => {
+    if (autoPlaceMode) {
+        handleAutoPlaceClick(hex.id);
+    } else if (!isLocked) {
+        setSelectedHex(hex.id);
+    }
+};
+return <Hexagon key={hex.id} hex={hex} onClick={handleClick} isAutoPlaceHighlight={isHighlight}/>;
+})}
+{isLocked && edges.map((e, i) => {
+const v1 = vertices[e.v1], v2 = vertices[e.v2];
+if (!v1 || !v2) return null;
+const ek = [e.v1, e.v2].sort().join('|');
+const road = roads.find(r => r.edge === ek);
+return <line key={i} x1={v1.x} y1={v1.y} x2={v2.x} y2={v2.y} stroke={road ? playerColors[road.player] : '#CCC'} strokeWidth={road ? 4 : 1} style={{cursor: placementMode === 'road' ? 'pointer' : 'default'}} onClick={() => handleEdgeClick(e)}/>;
+})}
+{isLocked && Object.entries(vertices).map(([k, v]) => {
+const sett = settlements.find(s => s.vertex === k);
+const port = ports.find(p => p.vertex === k);
+return (
+<g key={k}>
+<circle cx={v.x} cy={v.y} r={sett ? 12 : 8} fill={sett ? playerColors[sett.player] : getVertexColor(v.points)} opacity="0.9" stroke={sett ? '#000' : (port ? '#FFD700' : '#000')} strokeWidth={port ? 3 : 1} style={{cursor: (placementMode === 'settlement' || placementMode === 'port') ? 'pointer' : 'default'}} onClick={() => { if (placementMode === 'settlement') handleVertexClick(k); if (placementMode === 'port') handlePortClick(k); }}/>
+{!sett && <text x={v.x} y={v.y} textAnchor="middle" dy="4" fontSize="11" fontWeight="bold" fill="#FFF" style={{pointerEvents: 'none'}}>{v.points}</text>}
+{port && <text x={v.x} y={v.y - 15} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#000" style={{pointerEvents: 'none'}}>{port.type}</text>}
+</g>
+);
+})}
+</svg>
+</div>
+</div>
+
+<div className="w-72 bg-amber-50 rounded-lg p-4 border-2 border-amber-300">
+{selectedHex !== null && !isLocked ? (
+<div>
+<h3 className="font-bold text-lg mb-3">Edit Hex</h3>
+<div className="space-y-3">
+<div>
+<label className="block text-sm font-semibold mb-1">Resource</label>
+<select value={hexes.find(h => h.id === selectedHex)?.resource || ''} onChange={(e) => updateHex(selectedHex, 'resource', e.target.value)} className="w-full p-2 border rounded">
+<option value="">None</option>
+<option value="wood">Wood</option>
+<option value="brick">Brick</option>
+<option value="sheep">Sheep</option>
+<option value="wheat">Wheat</option>
+<option value="ore">Ore</option>
+<option value="desert">Desert</option>
+</select>
+</div>
+<div>
+<label className="block text-sm font-semibold mb-1">Number</label>
+<select value={hexes.find(h => h.id === selectedHex)?.number || ''} onChange={(e) => updateHex(selectedHex, 'number', e.target.value)} className="w-full p-2 border rounded" disabled={hexes.find(h => h.id === selectedHex)?.resource === 'desert'}>
+<option value="">None</option>
+{[2,3,4,5,6,8,9,10,11,12].map(n => <option key={n} value={n}>{n}</option>)}
+</select>
+</div>
+<button onClick={() => removeHex(selectedHex)} className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Remove Hex</button>
+</div>
+</div>
+) : isLocked && placementMode === 'port' && ports.length > 0 ? (
+<div>
+<h3 className="font-bold text-lg mb-3">Port Settings</h3>
+{ports.map((p, i) => (
+<div key={i} className="mb-2 p-2 bg-white rounded border">
+<select value={p.type} onChange={(e) => updatePortType(p.vertex, e.target.value)} className="w-full p-1 border rounded text-sm">
+{portTypes.map(t => <option key={t} value={t}>{t}</option>)}
+</select>
+</div>
+))}
+</div>
+) : (
+<div className="text-center text-gray-500 mt-10">
+<p>{isLocked ? 'Select player and placement mode' : 'Select a hex to edit'}</p>
+</div>
+)}
+</div>
+</div>
+</div>
+
+{isLocked && Object.keys(vertices).length > 0 && (
+<>
+<div className="bg-white rounded-lg shadow-lg p-6">
+<h2 className="text-2xl font-bold text-amber-800 mb-4">Player Statistics</h2>
+<div className="space-y-4">
+{Object.entries(getPlayerStats()).map(([player, stats]) => {
+if (stats.totalPoints === 0) return null;
+return (
+<div key={player} className="border-2 rounded-lg p-4" style={{borderColor: playerColors[player]}}>
+<div className="flex items-center gap-3 mb-2">
+<div className="w-8 h-8 rounded-full" style={{backgroundColor: playerColors[player], border: player === 'white' ? '2px solid #000' : 'none'}}></div>
+<h3 className="text-xl font-bold capitalize">{player}</h3>
+<span className="ml-auto text-2xl font-bold">{stats.totalPoints} pips</span>
+</div>
+<div className="grid grid-cols-5 gap-2 mt-2">
+{Object.entries(stats.resources).map(([res, pips]) => pips > 0 && (
+<div key={res} className="text-center p-2 rounded" style={{backgroundColor: resourceColors[res] + '40'}}>
+<div className="text-xs capitalize font-semibold">{res}</div>
+<div className="text-lg font-bold">{pips}</div>
+</div>
+))}
+</div>
+</div>
+);
+})}
+</div>
+</div>
+<div className="bg-white rounded-lg shadow-lg p-6">
+<h2 className="text-2xl font-bold text-amber-800 mb-4">Resource Totals</h2>
+<div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+{Object.entries(getResourceTotals()).map(([res, total]) => (
+<div key={res} className="rounded-lg p-4 text-center border-2" style={{backgroundColor: resourceColors[res] + '40', borderColor: resourceColors[res]}}>
+<div className="text-lg font-bold capitalize">{res}</div>
+<div className="text-3xl font-bold" style={{color: resourceColors[res]}}>{total} pips</div>
+</div>
+))}
+</div>
+</div>
+</>
+)}
+</div>
+)}
+</div>
+</div>
+);
+};
+
+try {
+    ReactDOM.createRoot(document.getElementById('root')).render(<CatanStatsTracker />);
+} catch (e) {
+    document.getElementById('root').innerHTML = '<p style="color:red;padding:20px;">Error rendering app: ' + e.message + '</p>';
+    console.error(e);
+}
+    </script>
+</body>
+</html>
