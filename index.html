@@ -4,11 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Catan Statistics Tracker</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <meta name="description" content="Track Catan dice rolls against the odds and score settlement spots on your board.">
+    <link rel="icon" href="data:,">
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@8.0.7/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
 </head>
 <body>
     <div id="root"><p style="padding:20px;">Loading... If this stays visible, check browser console (F12) for errors.</p></div>
@@ -46,7 +50,7 @@ const DiceChart = ({ chartData }) => {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    y: { beginAtZero: true, max: 20 }
+                    y: { beginAtZero: true, suggestedMax: 20 }
                 },
                 plugins: {
                     tooltip: {
@@ -195,14 +199,14 @@ const chartData = Object.keys(rolls).map(n => ({roll: n, Actual: totalRolls > 0 
 const potentialHexes = useMemo(() => {
 if (isLocked) return [];
 const occupied = new Set(hexes.map(h => `${h.x.toFixed(2)},${h.y.toFixed(2)}`));
-const potential = new Set();
+const potential = new Map();
 hexes.forEach(hex => {
 [{x: hex.x + HEX_WIDTH, y: hex.y}, {x: hex.x - HEX_WIDTH, y: hex.y}, {x: hex.x + HEX_WIDTH/2, y: hex.y + HEX_HEIGHT}, {x: hex.x - HEX_WIDTH/2, y: hex.y + HEX_HEIGHT}, {x: hex.x + HEX_WIDTH/2, y: hex.y - HEX_HEIGHT}, {x: hex.x - HEX_WIDTH/2, y: hex.y - HEX_HEIGHT}].forEach(pos => {
 const key = `${pos.x.toFixed(2)},${pos.y.toFixed(2)}`;
-if (!occupied.has(key)) potential.add(JSON.stringify(pos));
+if (!occupied.has(key) && !potential.has(key)) potential.set(key, pos);
 });
 });
-return Array.from(potential).map(s => JSON.parse(s));
+return Array.from(potential.values());
 }, [hexes, isLocked]);
 
 const updateHex = (id, field, val) => {
@@ -413,7 +417,7 @@ return (
 </div>
 <div className="grid grid-cols-11 gap-2">
 {Object.keys(rolls).map(n => (
-<button key={n} onClick={() => recordRoll(parseInt(n))} className="aspect-square bg-gradient-to-br from-amber-600 to-amber-800 text-white rounded-lg text-2xl font-bold hover:from-amber-700 hover:to-amber-900 shadow-md hover:shadow-lg transform hover:scale-105">{n}</button>
+<button key={n} onClick={() => recordRoll(parseInt(n))} className="aspect-square bg-gradient-to-br from-amber-600 to-amber-800 text-white rounded-lg text-lg sm:text-2xl font-bold hover:from-amber-700 hover:to-amber-900 shadow-md hover:shadow-lg transform hover:scale-105">{n}</button>
 ))}
 </div>
 <div className="grid grid-cols-11 gap-2 mt-2">
@@ -487,7 +491,7 @@ Tap tiles to select/deselect. Click Next when done, or None if there are no {aut
 <div className="flex gap-2 items-center flex-wrap">
 <span className="font-semibold">Player:</span>
 {Object.entries(playerColors).map(([c, hex]) => (
-<button key={c} onClick={() => setSelectedPlayer(c)} className={`w-10 h-10 rounded-full ${selectedPlayer === c ? 'ring-4 ring-black' : 'ring-2 ring-gray-300'}`} style={{backgroundColor: hex}}/>
+<button key={c} aria-label={`${c} player`} onClick={() => setSelectedPlayer(c)} className={`w-10 h-10 rounded-full ${selectedPlayer === c ? 'ring-4 ring-black' : 'ring-2 ring-gray-300'}`} style={{backgroundColor: hex}}/>
 ))}
 </div>
 <div className="flex gap-2 flex-wrap">
@@ -547,7 +551,7 @@ return (
 <div className="space-y-3">
 <div>
 <label className="block text-sm font-semibold mb-1">Resource</label>
-<select value={hexes.find(h => h.id === selectedHex)?.resource || ''} onChange={(e) => updateHex(selectedHex, 'resource', e.target.value)} className="w-full p-2 border rounded">
+<select aria-label="Resource" value={hexes.find(h => h.id === selectedHex)?.resource || ''} onChange={(e) => updateHex(selectedHex, 'resource', e.target.value)} className="w-full p-2 border rounded">
 <option value="">None</option>
 <option value="wood">Wood</option>
 <option value="brick">Brick</option>
@@ -559,7 +563,7 @@ return (
 </div>
 <div>
 <label className="block text-sm font-semibold mb-1">Number</label>
-<select value={hexes.find(h => h.id === selectedHex)?.number || ''} onChange={(e) => updateHex(selectedHex, 'number', e.target.value)} className="w-full p-2 border rounded" disabled={hexes.find(h => h.id === selectedHex)?.resource === 'desert'}>
+<select aria-label="Number" value={hexes.find(h => h.id === selectedHex)?.number || ''} onChange={(e) => updateHex(selectedHex, 'number', e.target.value)} className="w-full p-2 border rounded" disabled={hexes.find(h => h.id === selectedHex)?.resource === 'desert'}>
 <option value="">None</option>
 {[2,3,4,5,6,8,9,10,11,12].map(n => <option key={n} value={n}>{n}</option>)}
 </select>
@@ -572,7 +576,7 @@ return (
 <h3 className="font-bold text-lg mb-3">Port Settings</h3>
 {ports.map((p, i) => (
 <div key={i} className="mb-2 p-2 bg-white rounded border">
-<select value={p.type} onChange={(e) => updatePortType(p.vertex, e.target.value)} className="w-full p-1 border rounded text-sm">
+<select aria-label="Port type" value={p.type} onChange={(e) => updatePortType(p.vertex, e.target.value)} className="w-full p-1 border rounded text-sm">
 {portTypes.map(t => <option key={t} value={t}>{t}</option>)}
 </select>
 </div>
