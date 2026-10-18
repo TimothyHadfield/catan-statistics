@@ -13,6 +13,7 @@ No active goal. The app is finished and live; only fixes when Tim asks.
 | Board Builder, Auto Place, Lock & Calculate, settlements/roads/ports, stats | Working (live) |
 | Upload Board Photo | Broken on the live site: calls the Anthropic API with no key. Needs Tim's decision |
 | Tests | None (single HTML file); verified with phone-view |
+| Site icon (2026-10-17) | `icon.svg` (yellow hex tile with brick-red bar chart on green) + `apple-touch-icon.png` 180 px, linked in `index.html`; replaced the empty favicon |
 
 ## Authorized next steps
 None.
