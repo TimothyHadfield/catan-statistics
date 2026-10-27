@@ -224,12 +224,12 @@
           st.eOwner[a.e] = seat; st.freeRoads--; log(st, { k: 'road', p: seat, e: a.e, free: 1 });
           updateLongest(st);
         } else if (a.t !== 'stop') fail('Place your free roads');
-        if (a.t === 'stop' || st.freeRoads <= 0 || !roadsLeft(st, seat) || !legalRoads(st, seat).length) { st.freeRoads = 0; st.phase = 'main'; }
+        if (a.t === 'stop' || st.freeRoads <= 0 || !roadsLeft(st, seat) || !legalRoads(st, seat).length) { st.freeRoads = 0; st.phase = st.roadsBack || 'main'; }
         checkWin(st); return st;
       }
       case 'trade': return tradeMove(st, seat, a);
       case 'roll':
-        if (a.t === 'play' && a.card === 'K') return playDev(st, seat, a);
+        if (a.t === 'play') return playDev(st, seat, a); // any card may be played before the roll
         if (a.t !== 'roll') fail('Roll the dice first');
         return roll(st);
       case 'main': return mainMove(st, seat, a);
@@ -254,7 +254,8 @@
   }
 
   function roll(st) {
-    const d = [1 + Math.floor(rnd(st) * 6), 1 + Math.floor(rnd(st) * 6)], t = d[0] + d[1];
+    checkWin(st); if (st.phase === 'over') return st; // points gained on another's turn win now
+    const d =[1 + Math.floor(rnd(st) * 6), 1 + Math.floor(rnd(st) * 6)], t = d[0] + d[1];
     st.dice = d; st.rolls[t]++;
     if (t === 7) {
       const dis = {};
@@ -308,6 +309,7 @@
     } else if (a.card === 'R') {
       st.freeRoads = Math.min(2, roadsLeft(st, p));
       log(st, { k: 'play', p, card: 'R' });
+      st.roadsBack = st.phase === 'roll' ? 'roll' : 'main';
       if (st.freeRoads > 0 && legalRoads(st, p).length) st.phase = 'roads'; else st.freeRoads = 0;
     } else if (a.card === 'P') {
       const want = [a.r1, a.r2];

@@ -50,10 +50,30 @@ test('secrecy: public view and other seats never see a hand, dev cards, point ca
   assert.ok(!txt.includes('"fresh":['), 'fresh cards are a count');
   for (let j = 0; j < 4; j++) {
     const mine = game.privateView(s, j);
-    assert.deepStrictEqual(Object.keys(mine).sort(), ['dev', 'fresh', 'res', 'vpCards']);
+    assert.deepStrictEqual(Object.keys(mine).sort(), ['dev', 'fresh', 'res', 'steal', 'vpCards']);
     const g = merge(pub, mine, j);
     g.players.forEach((P, i) => { if (i !== j) { assert.strictEqual(typeof P.res, 'number'); assert.strictEqual(typeof P.dev, 'number'); } });
     assert.deepStrictEqual(g.players[j].res, s.players[j].res);
+  }
+});
+
+test('a stolen card is shown to the thief and the victim only', () => {
+  const rng = mulberry(21);
+  let s = game.setup(3, {}, rng, Array.from({ length: 3 }, () => ({ kind: 'computer' })));
+  let e = null;
+  for (let k = 0; k < 4000 && !e; k++) {
+    const seat = game.toAct(s)[0];
+    s = game.apply(s, seat, game.bot({ state: s }, seat, rng));
+    const last = s.log[s.log.length - 1];
+    if (last.k === 'robber' && last.from >= 0) e = last;
+  }
+  assert.ok(e, 'a steal happened');
+  const pub = game.publicView(s);
+  for (let j = 0; j < 3; j++) {
+    const g = merge(pub, game.privateView(s, j), j);
+    const seen = g.log.find(x => x.n === e.n).r;
+    if (j === e.p || j === e.from) assert.strictEqual(seen, e.r, 'seat ' + j + ' sees the card');
+    else assert.strictEqual(seen, -2, 'seat ' + j + ' does not');
   }
 });
 

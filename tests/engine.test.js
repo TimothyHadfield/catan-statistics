@@ -221,6 +221,29 @@ test('reaching 10 points on your turn wins; hidden point cards count', () => {
   assert.strictEqual(s.phase, 'over'); assert.strictEqual(s.winner, p);
 });
 
+test('points gained on someone else\'s turn win as soon as your own turn comes', () => {
+  const st = started(3, 13);
+  const p = st.turn;
+  st.players[p].vpCards = 10 - E.vp(st, p); st.players[p].dev = Array(st.players[p].vpCards).fill('V');
+  const s = E.apply(st, p, { t: 'roll' });
+  assert.strictEqual(s.phase, 'over'); assert.strictEqual(s.winner, p);
+});
+
+test('any development card (not only a Knight) may be played before rolling', () => {
+  const st = started(3, 9), p = st.turn;
+  st.players[p].dev = ['R', 'P', 'M']; st.players[p].fresh = [];
+  let s = E.apply(clone(st), p, { t: 'play', card: 'P', r1: 0, r2: 4 });
+  assert.strictEqual(s.phase, 'roll'); assert.ok(s.players[p].res[0] >= 1);
+  s = E.apply(clone(st), p, { t: 'play', card: 'M', r1: 2 });
+  assert.strictEqual(s.phase, 'roll');
+  s = E.apply(clone(st), p, { t: 'play', card: 'R' });
+  assert.strictEqual(s.phase, 'roads');
+  s = E.apply(s, p, { t: 'road', e: E.legalRoads(s, p)[0] });
+  s = E.apply(s, p, { t: 'road', e: E.legalRoads(s, p)[0] });
+  assert.strictEqual(s.phase, 'roll', 'back to rolling after the free roads');
+  assert.throws(() => E.apply(clone(s), p, { t: 'end' }), /Roll/);
+});
+
 test('computer games: 60 games at every level mix end with a 10-point winner, every move legal, state is JSON', () => {
   const L = ['easy', 'medium', 'hard'];
   let rng = 1; const r = () => { rng = (rng * 16807) % 2147483647; return rng / 2147483647; };

@@ -28,7 +28,10 @@
     // only this seat's secrets, sorted so the doc stays the same until the hand really changes
     privateView(st, seat) {
       const P = st.players[seat]; if (!P) return null;
-      return { res: P.res.slice(), dev: P.dev.slice().sort((a, b) => order(a) - order(b)), fresh: P.fresh.slice().sort((a, b) => order(a) - order(b)), vpCards: P.vpCards };
+      // the last steal this seat took part in (thief or victim): which card it was
+      let steal = null;
+      for (let i = st.log.length - 1; i >= 0; i--) { const e = st.log[i]; if (e.k === 'robber' && e.from >= 0 && (e.p === seat || e.from === seat)) { steal = { n: e.n, r: e.r }; break; } }
+      return { res: P.res.slice(), dev: P.dev.slice().sort((a, b) => order(a) - order(b)), fresh: P.fresh.slice().sort((a, b) => order(a) - order(b)), vpCards: P.vpCards, steal };
     },
     bot(ctx, seat, rng) { return AI.choose(ctx.state, seat, rng); },
     isOver(st) { return st.phase === 'over'; },
@@ -38,6 +41,7 @@
   function merge(pub, mine, seat) {
     const g = JSON.parse(JSON.stringify(pub));
     if (mine && g.players[seat]) Object.assign(g.players[seat], { res: mine.res.slice(), dev: mine.dev.slice(), fresh: mine.fresh.slice(), vpCards: mine.vpCards });
+    if (mine && mine.steal) { const e = g.log.find(x => x.n === mine.steal.n); if (e) e.r = mine.steal.r; }
     return g;
   }
 
