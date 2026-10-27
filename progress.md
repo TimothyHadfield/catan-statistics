@@ -26,6 +26,7 @@ Catan went from a dice tracker to a playable base game vs computer (manager brie
 - Keep the tracker as its own tab (Tim uses it at real tables).
 
 ## Traps
+- **online.js cache stamp (2026-10-27):** every import of `js/online.js` uses `?v=a3d0418b`, the `_online` content stamp. After a re-copy: put the new stamp from `node ../_online/tools/stamp.mjs` there, bump the importing file's `?v=` (and pwa.js `data-version`), then `node ../_online/tools/stamp.mjs --check .` must say OK.
 - See `CLAUDE.md` Traps (online cost, log `n` field, kit copies byte-identical).
 
 ## Decisions

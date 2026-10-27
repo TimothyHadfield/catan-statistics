@@ -3,7 +3,7 @@
 // ONLINE is on (Tim 2026-10-27: "enable it to all games for now and we can disable it later").
 // One online game costs ~500 Firestore writes with online.js v2 (_online/test/cost.mjs). false hides it.
 const ONLINE = true;
-if (ONLINE) import('./net.js?v=2');
+if (ONLINE) import('./net.js?v=3');
 const E =window.CatanEngine, AI = window.CatanAI, CG = window.CatanGame;
 const { G, RES, COST } = E;
 const $ = s => document.querySelector(s);
