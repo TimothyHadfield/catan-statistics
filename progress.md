@@ -4,7 +4,7 @@
 Last updated 2026-10-27. Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
 
 ## Goal right now
-Catan went from a dice tracker to a playable base game vs computer (manager brief 2026-10-27: on par with the other wave games). Online rooms are built but switched off pending Tim (cost).
+Catan went from a dice tracker to a playable base game vs computer (manager brief 2026-10-27: on par with the other wave games). Online rooms (friend codes) are **ON** since 2026-10-27, Tim's go: "enable it to all games for now and we can disable it later if it becomes too much".
 
 ## Status
 | Area | State |
@@ -15,11 +15,11 @@ Catan went from a dice tracker to a playable base game vs computer (manager brie
 | Look: `_table` wood, `_fx` sounds/animations + settings, original tile art | Done |
 | Phone 393 / SE 320 / landscape / 1280 / 1440 | No page scroll; number tokens 13.7 / 9.5 (zoom) / 12 / 28 / 33 px |
 | Tracker tab (old app, `tracker.html`) | Kept; photo button **removed** (needed a paid API key) |
-| Online rooms (`_online`) | Built + tested locally, **OFF** (`ONLINE=false` in app.js): ~950–1,700 writes/game |
+| Online rooms (`_online` v2) | **ON** (`ONLINE=true` in app.js). Kit cost harness: ~507 writes / 1,120 reads per game. Two headless phones played a game on real Firestore (`tests/ui.online.mjs`). |
 | 5–6 players | Not built |
 
 ## Authorized next steps
-- None beyond the 2026-10-27 brief. Online needs Tim's go (cost).
+- 2026-10-27: online on for all games (Tim). Done.
 
 ## Standing instructions
 - Tim (brief 2026-10-27): "I want to make our boardgames the best in every single metric we can." Online: "talk to me before you're going to set something up that requires anything more than the firebase system we already have set up or takes up a large portion of our free plan."
@@ -37,9 +37,9 @@ Catan went from a dice tracker to a playable base game vs computer (manager brie
 
 ## NOT verified
 - Real iPhone (Safari engine at 393 only). Sounds not heard by a person.
-- Online play between two real devices (only the local `_online` room in node).
+- Online play on two real iPhones (two headless WebKit phones on real Firestore only, 2026-10-27).
 - Pass-the-phone with 2+ people only lightly checked headless.
 
 ## Rejected / parked
-- ~~Online rooms on by default~~: ~950–1,700 Firestore writes per game vs a ~2,000/day busy-day budget; parked for Tim.
+- ~~Online rooms off by default~~: switched on 2026-10-27 (Tim's go); `ONLINE=false` turns it off again.
 - ~~5–6 player extension~~: not cheap (bigger board, special build phase); parked.

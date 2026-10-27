@@ -1,9 +1,9 @@
 // Catan: the page. Local games run here (you + computers, or pass-the-phone);
 // online games go through js/net.js (shared online.js). Rules live in js/engine.js.
-// ONLINE is off: one online game costs ~950-1,700 Firestore writes (measured by
-// tools/guard.cjs), far over the free-plan budget. Turning it on is Tim's call; flip this to true.
-const ONLINE = false;
-if (ONLINE) import('./net.js?v=1');
+// ONLINE is on (Tim 2026-10-27: "enable it to all games for now and we can disable it later").
+// One online game costs ~500 Firestore writes with online.js v2 (_online/test/cost.mjs). false hides it.
+const ONLINE = true;
+if (ONLINE) import('./net.js?v=2');
 const E =window.CatanEngine, AI = window.CatanAI, CG = window.CatanGame;
 const { G, RES, COST } = E;
 const $ = s => document.querySelector(s);
