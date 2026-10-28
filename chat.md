@@ -12,3 +12,4 @@
 - **Built:** per-board geometry (`geo(st)`), 30-tile big board + extra build step, house rules section in Settings, 4 Learn videos in the rules sheet, Green/Brown seats, 6-seat online rooms. Fixed: robbing from a view (tapping a robber tile next to an opponent did nothing).
 - **Measured:** 31 tests (10 new, each failed on the old code first); measure.js 300 games/table incl. 5–6p (progress.md); ui-check 4p and 6p at 393/320/landscape/1280/1440 no scroll, no errors; ui-soak 3 six-player + 2 four-player games through the page, 0 illegal moves, 0 errors.
 - **Open (Tim):** special build phase vs paired players; balanced/friendly definitions; 5–6p online cost unmeasured.
+- **Kit sweep (same day, builder A1):** seat + "Points to win" selects get the dark own-drawn look (appearance none, SVG arrow; WebKit computed `appearance:none`, text #e8eaf0 on #161923); Settings 320 px already had no sideways scroll; 31/31 tests; no coach/pwa kit added (none here).

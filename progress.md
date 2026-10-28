@@ -33,6 +33,7 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 - **online.js cache stamp (2026-10-27):** every import of `js/online.js` uses `?v=a3d0418b`, the `_online` content stamp. After a re-copy: put the new stamp from `node ../_online/tools/stamp.mjs` there, bump the importing file's `?v=` (and pwa.js `data-version`), then `node ../_online/tools/stamp.mjs --check .` must say OK.
 - **Geometry is per board:** engine/ai must use `E.geo(st)`, app must call `useGeo()` before drawing. A stray `G.` works on 3–4p and silently breaks 5–6p.
 - **Views have hand counts (numbers), not arrays:** `sum()` accepts both. Before 2026-10-28 `victims()` threw on a view, so tapping a robber tile next to an opponent did nothing.
+- **Dark selects (2026-10-28 w3-sweep):** the seat and "Points to win" `<select>`s draw their own look (`appearance:none`, theme background, SVG arrow) because iPhone Safari shows a native white box with pale text. Settings at 320 px measured: no sideways scroll. No coach/pwa kit here on purpose.
 - PowerShell drops empty-string args (`''`): ui-check takes `all` instead of an empty "only".
 - See `CLAUDE.md` Traps (online cost, log `n` field, kit copies byte-identical).
 
