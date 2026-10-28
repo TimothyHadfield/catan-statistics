@@ -5,7 +5,8 @@
 const ONLINE = true;
 if (ONLINE) import('./net.js?v=3');
 const E =window.CatanEngine, AI = window.CatanAI, CG = window.CatanGame;
-const { G, RES, COST } = E;
+const { RES, COST } = E;
+let G = E.G; // the board shown now (E.G for 3-4 players, E.BIG for 5-6); set by useGeo()
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const U = 40; // svg units per hex radius
@@ -16,8 +17,14 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} },
 };
-const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, netName: '' }, store.get('catan.settings', {}));
+const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, netName: '',
+  friendly: false, balanced: false, vp: 10 }, store.get('catan.settings', {}));
+while (S.seats.length < 6) S.seats.push('medium');
+if (![3, 4, 5, 6].includes(S.n)) S.n = 4;
+if (!(S.vp >= 8 && S.vp <= 13)) S.vp = 10;
 if (!ONLINE) S.seats = S.seats.map(s => (s === 'online' ? 'medium' : s));
+// the rules a new game starts with (house rules are off by default, set in Settings)
+const gameRules = () => ({ board: S.board, vp: S.vp, friendly: !!S.friendly, balanced: !!S.balanced });
 const saveSettings = () => store.set('catan.settings', S);
 
 // ------------------------------------------------------------ app state
@@ -34,12 +41,20 @@ const colorOf = p => E.COLORS[p].hex;
 function current() { // { g, seat, toAct, online, isHost }
   if (app.net && app.net.pub) {
     const s = app.net;
-    return { g: CG.merge(s.pub, s.mine, s.mySeat), seat: s.mySeat, toAct: s.toAct || [], online: true };
+    const g = CG.merge(s.pub, s.mine, s.mySeat); useGeo(g);
+    return { g, seat: s.mySeat, toAct: s.toAct || [], online: true };
   }
   if (!app.st) return null;
   const st = app.st, seat = app.viewer;
-  const g = CG.merge(CG.game.publicView(st), CG.game.privateView(st, seat), seat);
+  const g = CG.merge(CG.game.publicView(st), CG.game.privateView(st, seat), seat); useGeo(g);
   return { g, seat, toAct: E.actors(st), online: false };
+}
+// switch the drawn board (and its zoom frame) when a 5-6 player game is shown, and back
+function useGeo(g) {
+  const want = E.geo(g);
+  if (want === G) return;
+  G = want; FIT = fitFor(G); view.sig = '';
+  setVB(Object.assign({}, FIT));
 }
 const humans = st => st.players.map((P, i) => (P.kind === 'human' ? i : -1)).filter(i => i >= 0);
 
@@ -82,17 +97,31 @@ const WHY = {
   online: ['Online', 'Make a room with an "Online friend" seat, then friends type its code here. Seats nobody takes become computers.'],
   trade: ['Trading', 'Bank: 4 of one for 1. A 3:1 harbour or a 2:1 harbour of that kind is cheaper once you have a town on it. Offers to players: computers say yes when the deal helps them and you are not about to win.'],
   strong: ['How strong?', 'Measured in computer-only games in node; see Settings.'],
+  extra: ['Extra build', 'With 5 or 6 players, after each turn everyone else gets a build step in turn order: build or buy a card, but no trading and no playing cards. It keeps the waits short. Players who can\'t afford anything are skipped.'],
+  big: ['5-6 players', 'A 30-tile board (2 deserts, 11 harbours), 34 development cards, 24 of each resource, and an extra build step for everyone after each turn.'],
 };
+// Learn: real videos, each checked with YouTube's oEmbed (title matches) on 2026-10-28
+const VIDEOS = [
+  ['How to play · Watch It Played', 'https://www.youtube.com/watch?v=oiQ6SgBzfqY'],
+  ['Rules in 4 minutes · The Rules Girl', 'https://www.youtube.com/watch?v=4fUa_ZJ7beM'],
+  ['Strategy guide · Colonist', 'https://www.youtube.com/watch?v=p6qsFP168Nc'],
+  ['5-6 players · Cardboard Crash Course', 'https://www.youtube.com/watch?v=EMWmMAw43ic'],
+];
+const videosHTML = () => `<div class="cap" style="margin-top:12px">Videos</div><ul class="vids">${VIDEOS.map(([t, u]) => `<li><a href="${u}" target="_blank" rel="noopener">${esc(t)}</a></li>`).join('')}</ul>`;
+const rulesExtra = () => `<p class="why small muted">5-6 players: bigger board and an extra build step after each turn. House rules (friendly robber, balanced board, points to win) are in Settings.</p>${videosHTML()}`;
 document.addEventListener('click', e => {
   const q = e.target.closest('[data-why]'); if (!q) return;
   const [t, b] = WHY[q.dataset.why] || ['', ''];
-  openSheet(`<div class="sheet-h"><span class="h">${t}</span><button class="btn sm ghost" data-close>Close</button></div><p class="why">${b}</p>${q.dataset.why === 'strong' ? strengthTable() : ''}`);
+  openSheet(`<div class="sheet-h"><span class="h">${t}</span><button class="btn sm ghost" data-close>Close</button></div><p class="why">${b}</p>${q.dataset.why === 'strong' ? strengthTable() : ''}${q.dataset.why === 'game' ? rulesExtra() : ''}`);
 });
 
 // ------------------------------------------------------------ board drawing
 const pt = v => [G.V[v].x * U, G.V[v].y * U];
-const hexPts = h => [0, 1, 2, 3, 4, 5].map(i => { const a = Math.PI / 180 * (60 * i - 90); return [(E.HEXES[h].x + Math.cos(a) * 0.985) * U, (E.HEXES[h].y + Math.sin(a) * 0.985) * U]; });
-const FIT = { x: -5.6 * U, y: -4.85 * U, w: 11.2 * U, h: 9.7 * U };
+const hexPts = h => [0, 1, 2, 3, 4, 5].map(i => { const a = Math.PI / 180 * (60 * i + G.rot); return [(G.HEXES[h].x + Math.cos(a) * 0.985) * U, (G.HEXES[h].y + Math.sin(a) * 0.985) * U]; });
+// the whole-board frame; the 5-6 player board is bigger, so it gets a wider frame of the same shape
+const fitFor = g => (g === E.BIG ? { x: -7.5 * U, y: -6.5 * U, w: 15 * U, h: 13 * U } : { x: -5.6 * U, y: -4.85 * U, w: 11.2 * U, h: 9.7 * U });
+let FIT = fitFor(E.G);
+const TK = () => (G === E.BIG ? 1.22 : 1); // number tokens a little larger on the big board so they stay readable
 const view = { vb: Object.assign({}, FIT), sig: '' };
 function patterns() {
   // original tile prints: pines, brick courses, grazing dots, wheat rows, rock facets, dunes
@@ -112,7 +141,11 @@ function drawStatic(g) {
   const sig = g.hexRes.join() + '|' + g.hexNum.join() + '|' + g.ports.map(p => p.type).join();
   if (view.sig === sig) return;
   view.sig = sig;
-  const sea = [0, 1, 2, 3, 4, 5].map(i => { const a = Math.PI / 3 * i; return (Math.cos(a) * 5.55 * U).toFixed(1) + ',' + (Math.sin(a) * 5.55 * U).toFixed(1); }).join(' ');
+  const big = G === E.BIG, tk = TK();
+  $('#board').classList.toggle('big', big);
+  const sea = (big ? [[7.05, 0], [7.05, 3.3], [1.2, 6.45], [-1.2, 6.45], [-7.05, 3.3], [-7.05, 0], [-7.05, -3.3], [-1.2, -6.45], [1.2, -6.45], [7.05, -3.3]]
+    : [0, 1, 2, 3, 4, 5].map(i => { const a = Math.PI / 3 * i; return [Math.cos(a) * 5.55, Math.sin(a) * 5.55]; }))
+    .map(([x, y]) => (x * U).toFixed(1) + ',' + (y * U).toFixed(1)).join(' ');
   let h = patterns();
   h += `<polygon class="frame" points="${sea}" /><polygon points="${sea}" fill="url(#seaG)"/><polygon points="${sea}" fill="url(#waves)"/>`;
   // harbours: two piers and a token
@@ -131,9 +164,9 @@ function drawStatic(g) {
   });
   g.hexNum.forEach((n, i) => {
     if (!n) return;
-    const cx = E.HEXES[i].x * U, cy = E.HEXES[i].y * U, pp = E.pips(n), red = n === 6 || n === 8;
-    let dots = ''; for (let k = 0; k < pp; k++) dots += `<circle cx="${cx + (k - (pp - 1) / 2) * 0.1 * U}" cy="${cy + 0.25 * U}" r="${0.034 * U}" />`;
-    h += `<g class="tok${red ? ' red' : ''}" data-num="${i}"><circle cx="${cx}" cy="${cy}" r="${0.4 * U}" class="tokc"/><text x="${cx}" y="${cy + 0.1 * U}" class="tokn">${n}</text><g class="pips">${dots}</g></g>`;
+    const cx = G.HEXES[i].x * U, cy = G.HEXES[i].y * U, pp = E.pips(n), red = n === 6 || n === 8;
+    let dots = ''; for (let k = 0; k < pp; k++) dots += `<circle cx="${cx + (k - (pp - 1) / 2) * 0.1 * tk * U}" cy="${cy + 0.25 * tk * U}" r="${0.034 * tk * U}" />`;
+    h += `<g class="tok${red ? ' red' : ''}" data-num="${i}"><circle cx="${cx}" cy="${cy}" r="${0.4 * tk * U}" class="tokc"/><text x="${cx}" y="${cy + 0.1 * tk * U}" class="tokn">${n}</text><g class="pips">${dots}</g></g>`;
   });
   $('#static').innerHTML = h;
 }
@@ -156,8 +189,8 @@ function drawLive(c) {
     h += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="road-u"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="road" style="stroke:${colorOf(o)}"/>`;
   });
   // robber
-  const rh = E.HEXES[g.robber];
-  const rx = rh.x * U - 0.52 * U, ry = rh.y * U + 0.05 * U;
+  const rh = G.HEXES[g.robber];
+  const rx = rh.x * U - (0.52 + (TK() - 1) * 0.4) * U, ry = rh.y * U + 0.05 * U;
   h += `<g class="robber" transform="translate(${rx},${ry})"><ellipse cx="0" cy="${0.36 * U}" rx="${0.2 * U}" ry="${0.07 * U}" fill="rgba(0,0,0,.35)"/><path d="M${-0.17 * U},${0.36 * U}Q${-0.2 * U},${0.02 * U} ${-0.09 * U},${-0.1 * U}A${0.12 * U},${0.12 * U} 0 1 1 ${0.09 * U},${-0.1 * U}Q${0.2 * U},${0.02 * U} ${0.17 * U},${0.36 * U}Z" fill="#3b3640" stroke="#16131a" stroke-width="1.5"/></g>`;
   // buildings
   g.vOwner.forEach((o, v) => {
@@ -183,6 +216,8 @@ function drawLive(c) {
 }
 const spotPips = (g, v) => G.V[v].hexes.reduce((a, h) => a + (h === g.robber ? 0 : E.pips(g.hexNum[h])), 0);
 
+// my own turn after the roll, or my extra build step (5-6 players) on someone else's turn
+const buildingNow = (g, seat) => (g.phase === 'main' && g.turn === seat) || (g.phase === 'build' && g.build && g.build.queue[0] === seat);
 // what the viewer can tap on the board right now
 function targets(c) {
   const out = { verts: [], edges: [], hexes: [], cities: [], kind: '' };
@@ -192,9 +227,9 @@ function targets(c) {
     if (g.sub === 'settle') { out.verts = E.setupSpots(g); out.kind = 'settle'; }
     else out.edges = G.V[g.lastV].edges.filter(e => g.eOwner[e] < 0);
   } else if (g.phase === 'robber' && g.turn === seat) {
-    for (let i = 0; i < 19; i++) if (i !== g.robber) out.hexes.push(i);
+    out.hexes = E.robberHexes(g, seat);
   } else if (g.phase === 'roads' && g.turn === seat) out.edges = E.legalRoads(g, seat);
-  else if (g.phase === 'main' && g.turn === seat) {
+  else if (buildingNow(g, seat)) {
     if (app.mode === 'road') out.edges = E.legalRoads(g, seat);
     if (app.mode === 'settle') { out.verts = E.legalSettles(g, seat); out.kind = 'settle'; }
     if (app.mode === 'city') g.vOwner.forEach((o, v) => { if (o === seat && g.vLevel[v] === 1) out.cities.push(v); });
@@ -286,7 +321,7 @@ function act(a) {
 function afterMyMove(a) {
   if (['road', 'settle', 'city'].includes(a.t)) {
     const c = current();
-    const still = c && c.g.phase === 'main' && a.t !== 'city' && E.canPay(c.g.players[c.seat].res, COST[a.t === 'settle' ? 'settle' : 'road']);
+    const still = c && buildingNow(c.g, c.seat) && a.t !== 'city' && E.canPay(c.g.players[c.seat].res, COST[a.t === 'settle' ? 'settle' : 'road']);
     if (!still) app.mode = null;
   }
   if (a.t === 'robber') app.robHex = -1;
@@ -363,7 +398,7 @@ function showGains(g, me, gain, num) {
   if (!FX.settings.animations) return;
   g.hexNum.forEach((n, h) => {
     if (n !== num || h === g.robber) return;
-    const [sx, sy] = svgToScreen(E.HEXES[h].x * U, E.HEXES[h].y * U);
+    const [sx, sy] = svgToScreen(G.HEXES[h].x * U, G.HEXES[h].y * U);
     G.hexVerts[h].forEach(v => {
       const o = g.vOwner[v]; if (o < 0 || !gain[o][g.hexRes[h]]) return;
       const r = g.hexRes[h];
@@ -421,7 +456,7 @@ function mineHTML(c) {
   };
   return `<div class="hand">
     ${P.res.map(card).join('')}
-    <div class="myvp" style="--pc:${colorOf(seat)}" title="Your points"><b>${vpOf(g, seat, true)}</b><span>pts</span></div>
+    <div class="myvp" style="--pc:${colorOf(seat)}" title="Your points"><b>${vpOf(g, seat, true)}</b><span>${g.rules.vp !== 10 ? 'of ' + g.rules.vp : 'pts'}</span></div>
   </div>
   ${devBtns ? `<div class="devs">${devBtns}</div>` : ''}`;
 }
@@ -482,6 +517,7 @@ function panelHTML(c) {
     const o = g.offer;
     if (g.phase === 'trade' && o && o.from === seat) t = 'Waiting for answers…';
     else if (g.phase === 'discard') t = 'Robber! Big hands give back half…';
+    else if (g.phase === 'build' && g.players[c.toAct[0]]) t = `${esc(g.players[c.toAct[0]].name)}: extra build`;
     else t = `${esc(g.players[c.toAct[0]] ? g.players[c.toAct[0]].name : '')}'s turn`;
     return `<div class="phase"><div class="row">${diceHTML(g)}<div class="grow"><div class="h hs">${t}</div>${status}</div></div>${o ? `<div class="offer small">${offerText(g, o, seat)}</div>` : ''}</div>`;
   }
@@ -511,16 +547,20 @@ function panelHTML(c) {
       const no = o.resp.map((r, i) => (r === false && i !== o.from ? i : -1)).filter(i => i >= 0);
       return `<div class="phase">${head('Who gets the deal?', '<button class="btn sm ghost" id="cancelDeal">Cancel</button>')}<div class="offer small">${offerText(g, o, seat)}</div><div class="row wrap" style="margin-top:6px">${yes.map(v => `<button class="btn" data-deal="${v}"><i class="pc" style="background:${colorOf(v)}"></i>${esc(g.players[v].name)}</button>`).join('')}</div>${no.length ? `<div class="small muted" style="margin-top:4px">Said no: ${no.map(v => esc(g.players[v].name)).join(', ')}</div>` : ''}</div>`;
     }
-    case 'main': {
-      const res = P.res;
+    case 'main':
+    case 'build': {
+      const res = P.res, extra = g.phase === 'build';
       const b = (id, label, cost, ok) => `<button class="bld-btn${app.mode === id ? ' on' : ''}" data-build="${id}" ${ok ? '' : 'disabled'}><span>${label}</span><span class="cost">${costHTML(cost)}</span></button>`;
       const canR = E.canPay(res, COST.road) && E.roadsLeft(g, seat) && E.legalRoads(g, seat).length;
       const canS = E.canPay(res, COST.settle) && E.settlesLeft(g, seat) && E.legalSettles(g, seat).length;
       const canC = E.canPay(res, COST.city) && E.citiesLeft(g, seat) && g.vOwner.some((o, v) => o === seat && g.vLevel[v] === 1);
       const canD = E.canPay(res, COST.dev) && g.deck > 0;
-      const hint = app.mode ? `<div class="last small">Tap a ${app.mode === 'road' ? 'glowing edge' : app.mode === 'city' ? 'ringed town' : 'glowing corner'} · <button class="link" id="cancelMode">cancel</button></div>` : `<div class="last small muted">${esc(lastLine(c))}</div>`;
+      const hint = app.mode ? `<div class="last small">Tap a ${app.mode === 'road' ? 'glowing edge' : app.mode === 'city' ? 'ringed town' : 'glowing corner'} · <button class="link" id="cancelMode">cancel</button></div>`
+        : extra ? `<div class="last small"><b>Extra build</b> ${why('extra')}</div>` : `<div class="last small muted">${esc(lastLine(c))}</div>`;
+      // extra build step (5-6 players): no trading or cards, so the Trade slot stays empty
+      const trade = extra ? '<span></span>' : '<button class="bld-btn" id="tradeBtn"><span>Trade</span><span class="cost tr">⇄</span></button>';
       return `<div class="phase"><div class="row">${diceHTML(g)}<div class="grow">${hint}</div></div>
-        <div class="builds">${b('road', 'Road', COST.road, canR)}${b('settle', 'Town', COST.settle, canS)}${b('city', 'City', COST.city, canC)}${b('buy', 'Card', COST.dev, canD)}<button class="bld-btn" id="tradeBtn"><span>Trade</span><span class="cost tr">⇄</span></button><button class="bld-btn end" id="endBtn"><span>End</span><span class="cost tr">turn</span></button></div></div>`;
+        <div class="builds">${b('road', 'Road', COST.road, canR)}${b('settle', 'Town', COST.settle, canS)}${b('city', 'City', COST.city, canC)}${b('buy', 'Card', COST.dev, canD)}${trade}<button class="bld-btn end" id="endBtn"><span>${extra ? 'Done' : 'End'}</span><span class="cost tr">${extra ? 'pass' : 'turn'}</span></button></div></div>`;
     }
   }
   return '';
@@ -537,14 +577,17 @@ function seatChoice(i) {
     <option value="medium" ${v === 'medium' ? 'selected' : ''}>Computer · Medium</option>
     <option value="hard" ${v === 'hard' ? 'selected' : ''}>Computer · Hard</option></select>`;
 }
+const houseLine = () => [S.friendly && 'friendly robber', S.balanced && 'balanced board', S.vp !== 10 && S.vp + ' points'].filter(Boolean).join(' · ');
 function newGamePanel() {
   const n = S.n, net = S.seats.slice(1, n).includes('online');
   const rows = Array.from({ length: n }, (_, i) => `<div class="seat"><i style="background:${colorOf(i)}"></i><span>${E.COLORS[i].name}</span>${seatChoice(i)}</div>`).join('');
   return `<div class="phase">
     <div class="head"><span class="h">New game</span>${why('game')}<button class="btn primary sm" id="startBtn" style="min-width:96px" ${app.netBusy ? 'disabled' : ''}>${net ? 'Make room' : 'Start'}</button></div>
-    <div class="seg" id="nPl" aria-label="Players">${[3, 4].map(k => `<button aria-pressed="${k === n}" data-n="${k}">${k} players</button>`).join('')}</div>
+    <div class="seg" id="nPl" aria-label="Players">${[3, 4, 5, 6].map(k => `<button aria-pressed="${k === n}" data-n="${k}" aria-label="${k} players">${k}<span class="pl"> players</span></button>`).join('')}</div>
     <div style="margin-top:6px">${rows}</div>
-    <div class="seg" id="boardSeg" style="margin-top:8px" aria-label="Board">${[['random', 'Random board'], ['beginner', 'Beginner board']].map(([k, l]) => `<button aria-pressed="${S.board === k}" data-board="${k}">${l}</button>`).join('')}</div>
+    ${n >= 5 ? `<div class="small muted" style="margin-top:8px">Big board · extra build step after each turn ${why('big')}</div>`
+      : `<div class="seg" id="boardSeg" style="margin-top:8px" aria-label="Board">${[['random', S.balanced ? 'Balanced board' : 'Random board'], ['beginner', 'Beginner board']].map(([k, l]) => `<button aria-pressed="${S.board === k}" data-board="${k}">${l}</button>`).join('')}</div>`}
+    ${houseLine() ? `<div class="small muted" style="margin-top:6px">House rules: ${houseLine()} · <button class="link" data-tab-go="settings">change</button></div>` : ''}
   </div>${ONLINE ? `
   <div class="phase" style="margin-top:10px">
     <div class="head"><span class="h">Online</span>${why('online')}</div>
@@ -570,9 +613,9 @@ function startGame() {
   if (seats.includes('online')) { makeRoom(); return; }
   const nH = seats.filter((s, i) => i === 0 || s === 'human').length;
   const def = seats.map((s, i) => (i === 0 || s === 'human' ? { name: nH > 1 ? E.COLORS[i].name : (i === 0 ? 'You' : E.COLORS[i].name), kind: 'human', level: 'medium' } : { name: E.COLORS[i].name, kind: 'cpu', level: s }));
-  app.st = E.newGame(def, { board: S.board }, (Math.random() * 4294967296) >>> 0);
+  app.st = E.newGame(def, gameRules(), (Math.random() * 4294967296) >>> 0);
   app.viewer = 0; app.coverFor = -1; app.mode = null; app.robHex = -1; app.logN = 0; app.freshGame = true;
-  view.sig = ''; setVB(Object.assign({}, FIT));
+  view.sig = ''; useGeo(app.st); setVB(Object.assign({}, FIT));
   FX.play('shuffle');
   changed();
 }
@@ -583,7 +626,7 @@ async function makeRoom() {
   const n = S.n, seats = S.seats.slice(0, n);
   const kinds = seats.map((s, i) => (i === 0 ? 'human' : ['easy', 'medium', 'hard'].includes(s) ? 'computer' : 'empty'));
   app.netBusy = true; render();
-  const r = await window.CatanNet.createRoom({ name: netName(), seats: kinds, options: { rules: { board: S.board }, levels: seats.map(s => (['easy', 'medium', 'hard'].includes(s) ? s : 'medium')) } });
+  const r = await window.CatanNet.createRoom({ name: netName(), seats: kinds, options: { rules: gameRules(), levels: seats.map(s => (['easy', 'medium', 'hard'].includes(s) ? s : 'medium')) } });
   app.netBusy = false;
   if (!r.ok) { toast(r.message); render(); }
 }
@@ -691,6 +734,12 @@ function settingsPanel() {
       <div class="set-row"><span class="grow">Computer speed</span>${seg('speed', [['normal', 'Normal'], ['fast', 'Fast']])}</div>
       <div class="set-row"><span class="grow">Spot odds ${why('odds')}</span><label class="switch"><input type="checkbox" id="oddsSw" ${S.spotOdds ? 'checked' : ''}><span></span></label></div>
     </div>
+    <div class="phase"><div class="head"><span class="h">House rules</span></div>
+      <div class="set-row"><span class="grow">Friendly robber<span class="sub">Robber can't touch a player on 2 points or fewer.</span></span><label class="switch"><input type="checkbox" data-sw="friendly" ${S.friendly ? 'checked' : ''}><span></span></label></div>
+      <div class="set-row"><span class="grow">Balanced board<span class="sub">Same numbers and same resources never touch.</span></span><label class="switch"><input type="checkbox" data-sw="balanced" ${S.balanced ? 'checked' : ''}><span></span></label></div>
+      <div class="set-row"><span class="grow">Points to win<span class="sub">10 is standard; fewer is a shorter game.</span></span><select class="inp" id="vpSel" aria-label="Points to win">${[8, 9, 10, 11, 12, 13].map(k => `<option value="${k}" ${S.vp === k ? 'selected' : ''}>${k}</option>`).join('')}</select></div>
+      <div class="small muted" style="margin-top:6px">New games use these. Computers play by them too.</div>
+    </div>
     <div class="phase"><div class="head"><span class="h">Sound &amp; effects</span></div><div id="fxSet"></div></div>
     <div class="phase"><div class="head"><span class="h">How strong are the computers?</span></div>${strengthTable()}<div class="small muted" style="margin-top:6px">Computer-only games in node, seats rotated. A fair share is 33% at a 3-player table, 25% at 4.</div></div>
   </div>`;
@@ -710,7 +759,7 @@ function render() {
   document.body.classList.toggle('game-over', !!c && !lobby && c.g.phase === 'over');
   if (!c || lobby) {
     const demo = demoBoard();
-    drawStatic(demo); $('#live').innerHTML = '';
+    useGeo(demo); drawStatic(demo); $('#live').innerHTML = '';
     $('#seats').hidden = true; $('#mine').hidden = true;
     $('#panel').innerHTML = lobby ? lobbyPanel() : newGamePanel();
     bindPanel(); return;
@@ -718,7 +767,7 @@ function render() {
   drawStatic(c.g);
   fxStep(c);
   drawLive(c);
-  $('#seats').hidden = false; $('#seats').innerHTML = seatsHTML(c);
+  $('#seats').hidden = false; $('#seats').innerHTML = seatsHTML(c); $('#seats').classList.toggle('many', c.g.n >= 5);
   const noHand = app.coverFor >= 0 || c.g.phase === 'over'; // the end screen needs the room for the scores
   $('#mine').hidden = noHand; $('#mine').innerHTML = noHand ? '' : mineHTML(c);
   $('#panel').innerHTML = app.coverFor >= 0 ? `<div class="phase cover"><div class="h">Pass to ${esc(c.g.players[app.coverFor].name)}</div><button class="btn primary block" id="readyBtn" style="margin-top:10px">I'm ${esc(c.g.players[app.coverFor].name)}</button></div>` : panelHTML(c);
@@ -729,8 +778,9 @@ function render() {
   bindPanel();
 }
 let demoCache = null;
-function demoBoard() { // the beginner board, shown behind the new-game panel
-  if (!demoCache) demoCache = E.newGame([{}, {}, {}], { board: 'beginner' }, 1);
+function demoBoard() { // shown behind the new-game panel: the beginner board, or a big board for 5-6 players
+  const big = S.n >= 5;
+  if (!demoCache || !!demoCache.rules.big !== big) demoCache = E.newGame(Array.from({ length: big ? 5 : 3 }, () => ({})), { board: 'beginner' }, 1);
   return demoCache;
 }
 function renderSettings() {
@@ -738,10 +788,13 @@ function renderSettings() {
   FX.renderSettings($('#fxSet'));
   document.querySelectorAll('[data-set] [data-v]').forEach(b => b.addEventListener('click', () => { S[b.closest('[data-set]').dataset.set] = b.dataset.v; saveSettings(); renderSettings(); }));
   $('#oddsSw').addEventListener('change', e => { S.spotOdds = e.target.checked; saveSettings(); });
+  document.querySelectorAll('[data-sw]').forEach(sw => sw.addEventListener('change', () => { S[sw.dataset.sw] = sw.checked; saveSettings(); }));
+  $('#vpSel').addEventListener('change', e => { S.vp = +e.target.value; saveSettings(); });
 }
 function bindPanel() {
   const on = (sel, f) => document.querySelectorAll(sel).forEach(b => b.addEventListener('click', e => f(b, e)));
   on('#nPl [data-n]', b => { S.n = +b.dataset.n; saveSettings(); render(); });
+  on('[data-tab-go]', b => goTab(b.dataset.tabGo, true));
   on('#boardSeg [data-board]', b => { S.board = b.dataset.board; saveSettings(); render(); });
   document.querySelectorAll('[data-seat]').forEach(sel => sel.addEventListener('change', () => { S.seats[+sel.dataset.seat] = sel.value; saveSettings(); render(); }));
   on('#startBtn', startGame);

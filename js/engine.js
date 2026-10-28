@@ -7,22 +7,36 @@
   const COST = { road: [1, 1, 0, 0, 0], settle: [1, 1, 1, 1, 0], city: [0, 0, 0, 2, 3], dev: [0, 0, 1, 1, 1] };
   const PIECES = { road: 15, settle: 5, city: 4 };
   const DEV = { K: 14, V: 5, R: 2, P: 2, M: 2 }; // knight, victory point, road building, year of plenty, monopoly
+  const DEV_BIG = { K: 6, V: 0, R: 1, P: 1, M: 1 }; // added for 5-6 players (34 cards)
   const COLORS = [
     { id: 'red', name: 'Red', hex: '#d2463c' }, { id: 'blue', name: 'Blue', hex: '#3d74d6' },
     { id: 'white', name: 'White', hex: '#ece6d8' }, { id: 'orange', name: 'Orange', hex: '#e8892f' },
+    { id: 'green', name: 'Green', hex: '#4fae5c' }, { id: 'brown', name: 'Brown', hex: '#9a6a3e' },
   ];
   const pips = n => (n ? 6 - Math.abs(7 - n) : 0);
 
-  // ------------------------------------------------------------ board geometry (pointy-top hexes, unit size)
-  const HEXES = [];
-  for (let r = -2; r <= 2; r++) for (let q = -2; q <= 2; q++) if (Math.abs(q + r) <= 2) HEXES.push({ q, r, x: Math.sqrt(3) * (q + r / 2), y: 1.5 * r });
-  const G = (function build() {
+  // ------------------------------------------------------------ board geometry (unit size hexes)
+  // Base board: pointy-top hexes in rows of 3-4-5-4-3. The 5-6 player board: flat-top hexes in
+  // columns of 3-4-5-6-5-4-3 (30 tiles), so it lies wide like the base board on a phone screen.
+  const S3 = Math.sqrt(3);
+  function layout(lines, flat) {
+    const out = [];
+    lines.forEach((L, i) => {
+      const r = i - (lines.length - 1) / 2;
+      for (let k = 0; k < L; k++) {
+        const along = S3 * (k - (L - 1) / 2);
+        out.push(flat ? { x: 1.5 * r, y: along } : { x: along, y: 1.5 * r });
+      }
+    });
+    return out;
+  }
+  function build(HEXES, rot, gaps) {
     const vmap = new Map(), verts = [];
     const key = (x, y) => Math.round(x * 1000) + ',' + Math.round(y * 1000);
     const hexV = HEXES.map(h => {
       const ids = [];
       for (let i = 0; i < 6; i++) {
-        const a = Math.PI / 180 * (60 * i - 90), x = h.x + Math.cos(a), y = h.y + Math.sin(a), k = key(x, y);
+        const a = Math.PI / 180 * (60 * i + rot), x = h.x + Math.cos(a), y = h.y + Math.sin(a), k = key(x, y);
         if (!vmap.has(k)) { vmap.set(k, verts.length); verts.push({ x, y }); }
         ids.push(vmap.get(k));
       }
@@ -48,14 +62,20 @@
     });
     const E = eo.map(o => E0[o]);
     E.forEach((e, i) => { const [a, b] = e.v; V[a].edges.push(i); V[b].edges.push(i); V[a].adj.push(b); V[b].adj.push(a); });
-    // coast: edges with one hex, walked round the island by angle; 9 harbours spaced 3-3-4
+    // coast: edges with one hex, walked round the island by angle; harbours spaced by `gaps`
     const coast = E.map((e, i) => i).filter(i => E[i].hexes.length === 1);
     const ang = i => { const [a, b] = E[i].v; return Math.atan2((V[a].y + V[b].y) / 2, (V[a].x + V[b].x) / 2); };
     coast.sort((a, b) => ang(a) - ang(b));
-    const portEdges = []; let at = 1; const gaps = [3, 3, 4, 3, 3, 4, 3, 3, 4];
+    const portEdges = []; let at = 1;
     for (const g of gaps) { portEdges.push(coast[at % coast.length]); at += g; }
-    return { V, E, hexVerts, coast, portEdges };
-  })();
+    const hexAdj = HEXES.map((h, i) => HEXES.map((o, j) => j).filter(j => j !== i && Math.abs(Math.hypot(HEXES[j].x - h.x, HEXES[j].y - h.y) - S3) < 0.01));
+    return { V, E, hexVerts, coast, portEdges, HEXES, hexAdj, rot };
+  }
+  const HEXES = layout([3, 4, 5, 4, 3], false);
+  const G = build(HEXES, -90, [3, 3, 4, 3, 3, 4, 3, 3, 4]);
+  // 38 coast edges, 11 harbours: gaps add up to 38 and never put two harbours on one corner
+  const BIG = build(layout([3, 4, 5, 6, 5, 4, 3], true), 0, [4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 3]);
+  const geo = st => (st && st.rules && st.rules.big ? BIG : G);
 
   // ------------------------------------------------------------ rng
   function rnd(st) { let a = (st.seed = (st.seed + 0x6d2b79f5) | 0); let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
@@ -66,7 +86,8 @@
   const BEGIN_RES = [4, 2, 0, 3, 1, 2, 1, 3, 0, -1, 0, 4, 0, 4, 3, 2, 1, 3, 2];
   const BEGIN_NUM = [10, 2, 9, 12, 6, 4, 10, 9, 11, 0, 3, 8, 8, 3, 4, 5, 5, 6, 11];
   const BEGIN_PORTS = ['any', 'sheep', 'any', 'any', 'brick', 'wood', 'any', 'wheat', 'ore'];
-  const hexAdj = HEXES.map((h, i) => HEXES.map((o, j) => j).filter(j => j !== i && Math.max(Math.abs(HEXES[j].q - h.q), Math.abs(HEXES[j].r - h.r), Math.abs((HEXES[j].q + HEXES[j].r) - (h.q + h.r))) === 1));
+  const hexAdj = G.hexAdj;
+  const red = n => n === 6 || n === 8;
 
   function randomBoard(st) {
     const res = shuffle(st, [0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, -1]);
@@ -74,7 +95,6 @@
     for (let tries = 0; tries < 500; tries++) { // official advice: the red numbers (6 and 8) never touch
       nums = shuffle(st, [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12]);
       const full = []; let k = 0; res.forEach(r => full.push(r < 0 ? 0 : nums[k++]));
-      const red = n => n === 6 || n === 8;
       if (!full.some((n, i) => red(n) && hexAdj[i].some(j => red(full[j])))) { nums = full; break; }
       nums = full;
     }
@@ -82,24 +102,73 @@
     return { res, nums, ports };
   }
 
+  // Fill tiles one at a time in random order, each taking a random item that clashes with no filled
+  // neighbour (and keeps every corner at or under maxDots); start again on a dead end.
+  function placeAll(st, Gm, items, holes, clash, maxDots) {
+    const n = Gm.HEXES.length;
+    for (let tries = 0; tries < 4000; tries++) {
+      const out = new Array(n).fill(null), bag = shuffle(st, items.slice());
+      holes.forEach(h => { out[h] = 0; });
+      const order = shuffle(st, [...Array(n).keys()].filter(h => out[h] === null));
+      let ok = true;
+      for (const h of order) {
+        const pickAt = bag.findIndex(x => !Gm.hexAdj[h].some(j => out[j] !== null && clash(x, out[j])) &&
+          (!maxDots || Gm.hexVerts[h].every(v => Gm.V[v].hexes.reduce((a, k) => a + (k === h ? pips(x) : out[k] === null ? 0 : pips(out[k])), 0) <= maxDots)));
+        if (pickAt < 0) { ok = false; break; }
+        out[h] = bag.splice(pickAt, 1)[0];
+      }
+      if (ok) return out;
+    }
+    return null;
+  }
+  // 5-6 players: 30 tiles (6 wood, 5 brick, 6 sheep, 6 wheat, 5 ore, 2 deserts), 28 numbers, 11 harbours.
+  // balanced: same resources never touch, same numbers never touch, 6/8 apart, no corner over 12 dots.
+  function bigOrBalancedBoard(st, big, balanced) {
+    const Gm = big ? BIG : G;
+    const tiles = big ? [6, 5, 6, 6, 5] : [4, 3, 4, 4, 3], deserts = big ? 2 : 1;
+    const numbers = big ? [2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12]
+      : [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
+    const all = []; tiles.forEach((c, r) => { for (let i = 0; i < c; i++) all.push(r); });
+    let res = null, nums = null;
+    for (let round = 0; round < 50 && !nums; round++) {
+      if (balanced) {
+        const placed = placeAll(st, Gm, all.concat(Array(deserts).fill(-1)), [], (a, b) => a >= 0 && a === b);
+        if (!placed) continue;
+        res = placed;
+      } else res = shuffle(st, all.concat(Array(deserts).fill(-1)));
+      const holes = res.map((r, h) => (r < 0 ? h : -1)).filter(h => h >= 0);
+      nums = placeAll(st, Gm, numbers, holes, balanced ? (a, b) => a === b || (red(a) && red(b)) : (a, b) => red(a) && red(b), balanced ? 12 : 0);
+    }
+    const ports = shuffle(st, big ? ['any', 'any', 'any', 'any', 'any', 'wood', 'brick', 'sheep', 'sheep', 'wheat', 'ore']
+      : ['any', 'any', 'any', 'any', 'wood', 'brick', 'sheep', 'wheat', 'ore']);
+    return { res, nums, ports };
+  }
+
   // ------------------------------------------------------------ new game
-  // seats: [{ name, kind: 'human'|'cpu', level }]; rules: { board: 'random'|'beginner', vp: 10 }
+  // seats: [{ name, kind: 'human'|'cpu', level }] (3-6 of them)
+  // rules: { board: 'random'|'beginner', vp: 10, friendly: false, balanced: false }; big (5-6 players) is set here
   function newGame(seats, rules, seed) {
     const n = seats.length;
     const st = { v: 1, seed: (seed >>> 0) || 1 };
     const R = Object.assign({ board: 'random', vp: 10, maxTurns: 600 }, rules || {});
-    const b = R.board === 'beginner' ? { res: BEGIN_RES.slice(), nums: BEGIN_NUM.slice(), ports: BEGIN_PORTS.slice() } : randomBoard(st);
-    const deck = []; for (const k in DEV) for (let i = 0; i < DEV[k]; i++) deck.push(k);
+    if (!(Number.isInteger(R.vp) && R.vp >= 8 && R.vp <= 13)) throw new Error('Play to 8-13 points');
+    if (n >= 5) R.big = true; else delete R.big;
+    if (R.big) R.maxTurns = Math.max(R.maxTurns, 900);
+    // balanced applies to random boards (the beginner board is a fixed layout); 5-6 players are always random
+    const b = R.big || (R.balanced && R.board !== 'beginner') ? bigOrBalancedBoard(st, !!R.big, !!R.balanced)
+      : R.board === 'beginner' ? { res: BEGIN_RES.slice(), nums: BEGIN_NUM.slice(), ports: BEGIN_PORTS.slice() } : randomBoard(st);
+    const Gm = R.big ? BIG : G;
+    const deck = []; for (const k in DEV) for (let i = 0; i < DEV[k] + (R.big ? DEV_BIG[k] : 0); i++) deck.push(k);
     shuffle(st, deck);
     const order = []; for (let i = 0; i < n; i++) order.push(i); for (let i = n - 1; i >= 0; i--) order.push(i);
     Object.assign(st, {
       rules: R, n,
       players: seats.map((s, i) => ({ name: s.name || COLORS[i].name, kind: s.kind || 'human', level: s.level || 'medium', color: COLORS[i].id,
         res: [0, 0, 0, 0, 0], dev: [], fresh: [], knights: 0, vpCards: 0 })),
-      hexRes: b.res, hexNum: b.nums, ports: b.ports.map((type, i) => ({ e: G.portEdges[i], type })),
+      hexRes: b.res, hexNum: b.nums, ports: b.ports.map((type, i) => ({ e: Gm.portEdges[i], type })),
       robber: b.res.indexOf(-1),
-      vOwner: new Array(G.V.length).fill(-1), vLevel: new Array(G.V.length).fill(0), eOwner: new Array(G.E.length).fill(-1),
-      bank: [19, 19, 19, 19, 19], deck,
+      vOwner: new Array(Gm.V.length).fill(-1), vLevel: new Array(Gm.V.length).fill(0), eOwner: new Array(Gm.E.length).fill(-1),
+      bank: new Array(5).fill(R.big ? 24 : 19), deck, build: null,
       phase: 'setup', order, step: 0, sub: 'settle', lastV: -1,
       turn: 0, turns: 0, dice: null, devUsed: false, freeRoads: 0, discard: null, robberBack: 'main', offer: null, offers: 0,
       longest: { p: -1, len: 0 }, army: { p: -1, size: 0 }, roadLen: new Array(n).fill(0),
@@ -109,7 +178,7 @@
   }
 
   // ------------------------------------------------------------ helpers
-  const sum = a => a.reduce((x, y) => x + y, 0);
+  const sum = a => (typeof a === 'number' ? a : a.reduce((x, y) => x + y, 0)); // views hold other hands as counts
   const canPay = (res, cost) => cost.every((c, i) => res[i] >= c);
   function pay(st, p, cost) { const P = st.players[p]; cost.forEach((c, i) => { P.res[i] -= c; st.bank[i] += c; }); }
   const count = (st, p, lvl) => st.vLevel.reduce((a, l, v) => a + (st.vOwner[v] === p && l === lvl ? 1 : 0), 0);
@@ -119,22 +188,22 @@
   function publicVP(st, p) { return count(st, p, 1) + 2 * count(st, p, 2) + (st.longest.p === p ? 2 : 0) + (st.army.p === p ? 2 : 0); }
   function vp(st, p) { return publicVP(st, p) + st.players[p].vpCards; }
   function log(st, e) { e.n = st.logN = (st.logN || 0) + 1; st.log.push(e); if (st.log.length > 40) st.log.splice(0, st.log.length - 40); }
-  function farEnough(st, v) { return st.vOwner[v] < 0 && G.V[v].adj.every(u => st.vOwner[u] < 0); }
+  function farEnough(st, v) { return st.vOwner[v] < 0 && geo(st).V[v].adj.every(u => st.vOwner[u] < 0); }
   function portsOf(st, p) {
     const out = new Set();
-    st.ports.forEach(pt => { if (G.E[pt.e].v.some(v => st.vOwner[v] === p)) out.add(pt.type); });
+    st.ports.forEach(pt => { if (geo(st).E[pt.e].v.some(v => st.vOwner[v] === p)) out.add(pt.type); });
     return out;
   }
   function rate(st, p, r) { const ps = portsOf(st, p); return ps.has(RES[r]) ? 2 : ps.has('any') ? 3 : 4; }
   // a road may go on edge e if it's empty and touches p's building, or p's road through a vertex nobody else holds
   function roadOk(st, p, e) {
     if (st.eOwner[e] >= 0) return false;
-    return G.E[e].v.some(v => st.vOwner[v] === p || (st.vOwner[v] < 0 && G.V[v].edges.some(f => f !== e && st.eOwner[f] === p)));
+    return geo(st).E[e].v.some(v => st.vOwner[v] === p || (st.vOwner[v] < 0 && geo(st).V[v].edges.some(f => f !== e && st.eOwner[f] === p)));
   }
-  function settleOk(st, p, v) { return farEnough(st, v) && G.V[v].edges.some(e => st.eOwner[e] === p); }
-  function legalRoads(st, p) { const out = []; for (let e = 0; e < G.E.length; e++) if (roadOk(st, p, e)) out.push(e); return out; }
-  function legalSettles(st, p) { const out = []; for (let v = 0; v < G.V.length; v++) if (settleOk(st, p, v)) out.push(v); return out; }
-  function setupSpots(st) { const out = []; for (let v = 0; v < G.V.length; v++) if (farEnough(st, v)) out.push(v); return out; }
+  function settleOk(st, p, v) { return farEnough(st, v) && geo(st).V[v].edges.some(e => st.eOwner[e] === p); }
+  function legalRoads(st, p) { const out = []; for (let e = 0; e < geo(st).E.length; e++) if (roadOk(st, p, e)) out.push(e); return out; }
+  function legalSettles(st, p) { const out = []; for (let v = 0; v < geo(st).V.length; v++) if (settleOk(st, p, v)) out.push(v); return out; }
+  function setupSpots(st) { const out = []; for (let v = 0; v < geo(st).V.length; v++) if (farEnough(st, v)) out.push(v); return out; }
   function playable(st, p, k) { const P = st.players[p]; return P.dev.filter(c => c === k).length - P.fresh.filter(c => c === k).length; }
 
   // longest continuous road for p (roads are cut by other players' buildings)
@@ -145,12 +214,12 @@
     function dfs(v, len) {
       if (len > best) best = len;
       if (st.vOwner[v] >= 0 && st.vOwner[v] !== p && len > 0) return;
-      for (const e of G.V[v].edges) {
+      for (const e of geo(st).V[v].edges) {
         if (st.eOwner[e] !== p || used.has(e)) continue;
-        used.add(e); const [a, b] = G.E[e].v; dfs(a === v ? b : a, len + 1); used.delete(e);
+        used.add(e); const [a, b] = geo(st).E[e].v; dfs(a === v ? b : a, len + 1); used.delete(e);
       }
     }
-    for (const e of mine) for (const v of G.E[e].v) dfs(v, 0);
+    for (const e of mine) for (const v of geo(st).E[e].v) dfs(v, 0);
     return best;
   }
   function updateLongest(st) {
@@ -175,7 +244,7 @@
     st.hexNum.forEach((num, h) => {
       if (num !== roll || h === st.robber) return;
       const r = st.hexRes[h];
-      for (const v of G.hexVerts[h]) if (st.vOwner[v] >= 0) want[st.vOwner[v]][r] += st.vLevel[v];
+      for (const v of geo(st).hexVerts[h]) if (st.vOwner[v] >= 0) want[st.vOwner[v]][r] += st.vLevel[v];
     });
     const got = st.players.map(() => [0, 0, 0, 0, 0]);
     for (let r = 0; r < 5; r++) {
@@ -195,7 +264,40 @@
     if (st.phase === 'setup') return [st.order[st.step]];
     if (st.phase === 'discard') return Object.keys(st.discard).map(Number).sort((a, b) => a - b);
     if (st.phase === 'trade' && st.offer && st.offer.stage === 'ask') return st.offer.resp.map((r, i) => (r === null ? i : -1)).filter(i => i >= 0);
+    if (st.phase === 'build') return [st.build.queue[0]];
     return [st.turn];
+  }
+
+  // ------------------------------------------------------------ 5-6 players: special build phase
+  // After each turn, every other player in order may build (roads, towns, cities, cards) but not
+  // trade or play cards. Players who can't afford anything they could place are skipped.
+  function canBuildAny(st, q) {
+    const R = st.players[q].res;
+    if (canPay(R, COST.dev) && st.deck.length) return true;
+    if (canPay(R, COST.city) && citiesLeft(st, q) && st.vOwner.some((o, v) => o === q && st.vLevel[v] === 1)) return true;
+    if (canPay(R, COST.settle) && settlesLeft(st, q) && legalSettles(st, q).length) return true;
+    return canPay(R, COST.road) && roadsLeft(st, q) > 0 && legalRoads(st, q).length > 0;
+  }
+  function advanceBuild(st) {
+    const Q = st.build.queue;
+    while (Q.length && !canBuildAny(st, Q[0])) Q.shift();
+    if (Q.length) { st.phase = 'build'; return; }
+    st.build = null; nextTurn(st);
+  }
+  function endTurn(st, p) {
+    log(st, { k: 'end', p });
+    if (st.rules.big) {
+      const queue = []; for (let i = 1; i < st.n; i++) queue.push((st.turn + i) % st.n);
+      st.build = { queue }; advanceBuild(st);
+    } else nextTurn(st);
+  }
+  function nextTurn(st) {
+    st.turn = (st.turn + 1) % st.n; st.turns++; st.phase = 'roll'; st.devUsed = false; st.offers = 0;
+    st.players.forEach(Q => { Q.fresh = []; }); st.dice = null;
+    if (st.turns >= st.rules.maxTurns) { // safety valve for endless games: most points wins
+      let best = 0; for (let i = 1; i < st.n; i++) if (vp(st, i) > vp(st, best)) best = i;
+      st.winner = best; st.phase = 'over'; log(st, { k: 'win', p: best, timeout: 1 });
+    }
   }
 
   // ------------------------------------------------------------ apply
@@ -233,20 +335,23 @@
         if (a.t !== 'roll') fail('Roll the dice first');
         return roll(st);
       case 'main': return mainMove(st, seat, a);
+      case 'build':
+        if (!['road', 'settle', 'city', 'buy', 'end'].includes(a.t)) fail('Extra build: build or pass only');
+        return mainMove(st, seat, a);
     }
     fail('Game over');
   }
 
   function setupMove(st, p, a) {
     if (st.sub === 'settle') {
-      if (a.t !== 'settle' || !(a.v >= 0 && a.v < G.V.length) || !farEnough(st, a.v)) fail('Pick an open corner (not next to a town)');
+      if (a.t !== 'settle' || !(a.v >= 0 && a.v < geo(st).V.length) || !farEnough(st, a.v)) fail('Pick an open corner (not next to a town)');
       st.vOwner[a.v] = p; st.vLevel[a.v] = 1; st.lastV = a.v; st.sub = 'road';
       const second = st.step >= st.n, gain = [0, 0, 0, 0, 0];
-      if (second) G.V[a.v].hexes.forEach(h => { const r = st.hexRes[h]; if (r >= 0 && st.bank[r] > 0) { st.players[p].res[r]++; st.bank[r]--; gain[r]++; } });
+      if (second) geo(st).V[a.v].hexes.forEach(h => { const r = st.hexRes[h]; if (r >= 0 && st.bank[r] > 0) { st.players[p].res[r]++; st.bank[r]--; gain[r]++; } });
       log(st, { k: 'settle', p, v: a.v, setup: 1, gain: second ? gain : null });
       return st;
     }
-    if (a.t !== 'road' || !(a.e >= 0 && a.e < G.E.length) || st.eOwner[a.e] >= 0 || !G.E[a.e].v.includes(st.lastV)) fail('Put the road next to your new town');
+    if (a.t !== 'road' || !(a.e >= 0 && a.e < geo(st).E.length) || st.eOwner[a.e] >= 0 || !geo(st).E[a.e].v.includes(st.lastV)) fail('Put the road next to your new town');
     st.eOwner[a.e] = p; st.sub = 'settle'; st.lastV = -1; st.step++;
     log(st, { k: 'road', p, e: a.e, setup: 1 });
     if (st.step >= st.order.length) { st.phase = 'roll'; st.turn = 0; updateLongest(st); }
@@ -274,11 +379,21 @@
   // victims you may rob at hex h: other players with a building there and at least one card
   function victims(st, p, h) {
     const s = new Set();
-    for (const v of G.hexVerts[h]) { const o = st.vOwner[v]; if (o >= 0 && o !== p && sum(st.players[o].res) > 0) s.add(o); }
+    for (const v of geo(st).hexVerts[h]) { const o = st.vOwner[v]; if (o >= 0 && o !== p && sum(st.players[o].res) > 0) s.add(o); }
     return [...s].sort((a, b) => a - b);
   }
+  // tiles the robber may move to. Friendly robber: not a tile touching another player on 2 points
+  // or fewer (shown points), unless that rules out every tile.
+  function robberHexes(st, p) {
+    const n = geo(st).HEXES.length, all = [];
+    for (let h = 0; h < n; h++) if (h !== st.robber) all.push(h);
+    if (!st.rules.friendly) return all;
+    const ok = all.filter(h => !geo(st).hexVerts[h].some(v => { const o = st.vOwner[v]; return o >= 0 && o !== p && publicVP(st, o) <= 2; }));
+    return ok.length ? ok : all;
+  }
   function robberMove(st, p, a) {
-    if (a.t !== 'robber' || !(a.h >= 0 && a.h < 19) || a.h === st.robber) fail('Move the robber to another tile');
+    if (a.t !== 'robber' || !(a.h >= 0 && a.h < geo(st).HEXES.length) || a.h === st.robber) fail('Move the robber to another tile');
+    if (!robberHexes(st, p).includes(a.h)) fail('Friendly robber: not next to a player on 2 points');
     const vs = victims(st, p, a.h);
     let from = -1;
     if (vs.length) { if (!vs.includes(a.from)) fail('Pick who to rob'); from = a.from; }
@@ -334,13 +449,13 @@
       case 'road':
         if (!roadsLeft(st, p)) fail('No roads left');
         if (!canPay(P.res, COST.road)) fail('Need wood + brick');
-        if (!(a.e >= 0 && a.e < G.E.length) || !roadOk(st, p, a.e)) fail('Roads must join your roads or towns');
+        if (!(a.e >= 0 && a.e < geo(st).E.length) || !roadOk(st, p, a.e)) fail('Roads must join your roads or towns');
         pay(st, p, COST.road); st.eOwner[a.e] = p; log(st, { k: 'road', p, e: a.e });
         updateLongest(st); break;
       case 'settle':
         if (!settlesLeft(st, p)) fail('No settlements left');
         if (!canPay(P.res, COST.settle)) fail('Need wood, brick, sheep, wheat');
-        if (!(a.v >= 0 && a.v < G.V.length) || !settleOk(st, p, a.v)) fail('Needs your road and no town next door');
+        if (!(a.v >= 0 && a.v < geo(st).V.length) || !settleOk(st, p, a.v)) fail('Needs your road and no town next door');
         pay(st, p, COST.settle); st.vOwner[a.v] = p; st.vLevel[a.v] = 1; log(st, { k: 'settle', p, v: a.v });
         updateLongest(st); break;
       case 'city':
@@ -379,15 +494,14 @@
         return st;
       }
       case 'end':
-        st.turn = (st.turn + 1) % st.n; st.turns++; st.phase = 'roll'; st.devUsed = false; st.offers = 0;
-        st.players.forEach(Q => { Q.fresh = []; }); st.dice = null;
-        log(st, { k: 'end', p });
-        if (st.turns >= st.rules.maxTurns) { // safety valve for endless games: most points wins
-          let best = 0; for (let i = 1; i < st.n; i++) if (vp(st, i) > vp(st, best)) best = i;
-          st.winner = best; st.phase = 'over'; log(st, { k: 'win', p: best, timeout: 1 });
-        }
+        if (st.phase === 'build') { log(st, { k: 'pass', p }); st.build.queue.shift(); advanceBuild(st); return st; }
+        endTurn(st, p);
         return st;
       default: fail('Not a move');
+    }
+    if (st.phase === 'build') { // points built here count when your own turn comes
+      if (!canBuildAny(st, p)) { st.build.queue.shift(); advanceBuild(st); }
+      return st;
     }
     checkWin(st);
     return st;
@@ -431,7 +545,8 @@
     return g;
   }
 
-  const api = { RES, COST, PIECES, DEV, COLORS, G, HEXES, pips, hexAdj, newGame, apply, actors, vp, publicVP, rate, portsOf,
+  const api = { RES, COST, PIECES, DEV, DEV_BIG, COLORS, G, BIG, geo, HEXES, pips, hexAdj, newGame, apply, actors, vp, publicVP, rate, portsOf,
+    robberHexes, canBuildAny,
     roadOk, settleOk, legalRoads, legalSettles, setupSpots, farEnough, playable, longestRoad, victims, view, sum, canPay,
     roadsLeft, settlesLeft, citiesLeft, rnd, BEGIN_RES, BEGIN_NUM };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CatanEngine = api;

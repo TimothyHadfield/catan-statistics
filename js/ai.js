@@ -20,12 +20,12 @@
   }
   function prodOf(st, p) { // expected cards per 36 rolls, per resource
     const out = [0, 0, 0, 0, 0];
-    st.vOwner.forEach((o, v) => { if (o !== p) return; G.V[v].hexes.forEach(h => { const r = st.hexRes[h]; if (r >= 0 && h !== st.robber) out[r] += pips(st.hexNum[h]) * st.vLevel[v]; }); });
+    st.vOwner.forEach((o, v) => { if (o !== p) return; E.geo(st).V[v].hexes.forEach(h => { const r = st.hexRes[h]; if (r >= 0 && h !== st.robber) out[r] += pips(st.hexNum[h]) * st.vLevel[v]; }); });
     return out;
   }
   function spotValue(st, v, w, have, lvl) {
     let s = 0; const got = new Set();
-    for (const h of G.V[v].hexes) {
+    for (const h of E.geo(st).V[v].hexes) {
       const r = st.hexRes[h]; if (r < 0) continue;
       const pv = pips(st.hexNum[h]);
       s += pv * w[r] * (h === st.robber ? 0.5 : 1);
@@ -33,7 +33,7 @@
       got.add(r);
     }
     if (lvl !== 'easy') s += got.size * 0.9;
-    const port = st.ports.find(pt => G.E[pt.e].v.includes(v));
+    const port = st.ports.find(pt => E.geo(st).E[pt.e].v.includes(v));
     if (port && lvl !== 'easy') {
       if (port.type === 'any') s += 1.2;
       else { const r = E.RES.indexOf(port.type); s += have ? Math.min(3, have[r] * 0.25) : 0.6; }
@@ -48,20 +48,20 @@
     if (st.sub === 'settle') {
       const spots = E.setupSpots(st);
       const have = prodOf(st, p), first = have.every(x => x === 0);
-      const scored = spots.map(v => ({ v, s: lvl === 'easy' ? G.V[v].hexes.reduce((a, h) => a + pips(st.hexNum[h]), 0) : spotValue(st, v, w, first ? null : have, lvl) }));
+      const scored = spots.map(v => ({ v, s: lvl === 'easy' ? E.geo(st).V[v].hexes.reduce((a, h) => a + pips(st.hexNum[h]), 0) : spotValue(st, v, w, first ? null : have, lvl) }));
       scored.sort((a, b) => b.s - a.s);
       if (lvl === 'easy') return { t: 'settle', v: pick(scored.slice(0, 10), rng).v };
       if (lvl === 'medium') return { t: 'settle', v: pick(scored.slice(0, 2), rng).v };
       return { t: 'settle', v: scored[0].v };
     }
     // road from the new town toward the best open corner two steps away
-    const opts = G.V[st.lastV].edges.filter(e => st.eOwner[e] < 0);
+    const opts = E.geo(st).V[st.lastV].edges.filter(e => st.eOwner[e] < 0);
     if (lvl === 'easy') return { t: 'road', e: pick(opts, rng) };
     let best = opts[0], bs = -1;
     for (const e of opts) {
-      const far = G.E[e].v[0] === st.lastV ? G.E[e].v[1] : G.E[e].v[0];
+      const far = E.geo(st).E[e].v[0] === st.lastV ? E.geo(st).E[e].v[1] : E.geo(st).E[e].v[0];
       let s = 0;
-      for (const u of G.V[far].adj) if (u !== st.lastV && E.farEnough(st, u)) s = Math.max(s, spotValue(st, u, w, null, lvl));
+      for (const u of E.geo(st).V[far].adj) if (u !== st.lastV && E.farEnough(st, u)) s = Math.max(s, spotValue(st, u, w, null, lvl));
       if (s > bs) { bs = s; best = e; }
     }
     return { t: 'road', e: best };
@@ -72,14 +72,14 @@
   function pathTo(st, p, target) {
     const dist = new Map(), first = new Map(), q = [];
     st.vOwner.forEach((o, v) => { if (o === p) { dist.set(v, 0); q.push(v); } });
-    st.eOwner.forEach((o, e) => { if (o === p) for (const v of G.E[e].v) if (!dist.has(v) && (st.vOwner[v] < 0 || st.vOwner[v] === p)) { dist.set(v, 0); q.push(v); } });
+    st.eOwner.forEach((o, e) => { if (o === p) for (const v of E.geo(st).E[e].v) if (!dist.has(v) && (st.vOwner[v] < 0 || st.vOwner[v] === p)) { dist.set(v, 0); q.push(v); } });
     for (let i = 0; i < q.length; i++) {
       const v = q[i], d = dist.get(v);
       if (d >= 4) continue;
       if (st.vOwner[v] >= 0 && st.vOwner[v] !== p) continue;
-      for (const e of G.V[v].edges) {
+      for (const e of E.geo(st).V[v].edges) {
         if (st.eOwner[e] >= 0) continue;
-        const u = G.E[e].v[0] === v ? G.E[e].v[1] : G.E[e].v[0];
+        const u = E.geo(st).E[e].v[0] === v ? E.geo(st).E[e].v[1] : E.geo(st).E[e].v[0];
         if (dist.has(u)) continue;
         dist.set(u, d + 1); first.set(u, d === 0 ? e : first.get(v)); q.push(u);
       }
@@ -90,7 +90,7 @@
   function bestTarget(st, p, w, lvl) {
     const have = prodOf(st, p);
     let best = null;
-    for (let v = 0; v < G.V.length; v++) {
+    for (let v = 0; v < E.geo(st).V.length; v++) {
       if (!E.farEnough(st, v)) continue;
       const path = E.settleOk(st, p, v) ? { e: -1, len: 0 } : pathTo(st, p, v);
       if (!path || path.len > (lvl === 'hard' ? 3 : 2)) continue;
@@ -150,10 +150,9 @@
     const vpOf = i => E.publicVP(st, i);
     const cards = i => (typeof st.players[i].res === 'number' ? st.players[i].res : sum(st.players[i].res));
     const cands = [];
-    for (let h = 0; h < 19; h++) {
-      if (h === st.robber) continue;
+    for (const h of E.robberHexes(st, p)) { // honours the friendly-robber option
       let mine = 0, hurt = 0;
-      for (const v of G.hexVerts[h]) {
+      for (const v of E.geo(st).hexVerts[h]) {
         const o = st.vOwner[v]; if (o < 0) continue;
         if (o === p) mine += st.vLevel[v];
         else hurt += st.vLevel[v] * (1 + (lvl === 'hard' ? vpOf(o) * 0.25 : 0.1 * vpOf(o)));
@@ -201,7 +200,7 @@
     if (st.devUsed || lvl === 'easy' && st.phase !== 'main') return null;
     const P = st.players[p];
     const has = k => E.playable(st, p, k) > 0;
-    const myOnRobber = G.hexVerts[st.robber].some(v => st.vOwner[v] === p);
+    const myOnRobber = E.geo(st).hexVerts[st.robber].some(v => st.vOwner[v] === p);
     if (has('K')) {
       const armyGain = P.knights + 1 >= 3 && P.knights + 1 > st.army.size && st.army.p !== p;
       if (myOnRobber || armyGain || (lvl === 'easy')) return { t: 'play', card: 'K' };
@@ -255,6 +254,18 @@
     return { t: 'end' };
   }
 
+  // 5-6 players' extra build step on someone else's turn: build what the plan can pay for, else pass
+  function buildMove(st, p, lvl, rng) {
+    const P = st.players[p], w = weights(st, lvl), pl = plans(st, p, w, lvl);
+    const opts = pl.list.filter(x => canPay(P.res, x.cost));
+    if (lvl === 'easy') return opts.length && rng() < 0.85 ? opts[0].act : { t: 'end' };
+    for (const x of opts) {
+      if (x.kind === 'dev' && lvl === 'medium' && pl.list.some(y => y.kind === 'settle' || y.kind === 'road') && sum(P.res) < 6) continue;
+      return x.act;
+    }
+    return { t: 'end' };
+  }
+
   function choose(st, p, rng) {
     rng = rng || Math.random;
     const lvl = st.players[p].level || 'medium';
@@ -274,6 +285,7 @@
       }
       case 'roll': { const d = devMove(st, p, lvl, weights(st, lvl), { list: [], tgt: null }); return d && d.card === 'K' && lvl !== 'easy' ? d : { t: 'roll' }; }
       case 'main': return mainMove(st, p, lvl, rng);
+      case 'build': return buildMove(st, p, lvl, rng);
     }
     return { t: 'end' };
   }

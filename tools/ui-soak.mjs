@@ -1,7 +1,7 @@
 // Headless soak: plays whole games through the real page (iPhone size, Safari engine). Your seat's
 // moves come from the Medium computer, sent through the same act() the buttons use, so every panel
 // (setup, roll, discard, robber, trade answers, end screen) gets drawn many times.
-//   node tools/ui-soak.mjs <baseUrl> <outPng> [games]
+//   node tools/ui-soak.mjs <baseUrl> <outPng> [games] [players]
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import os from 'node:os';
@@ -12,7 +12,8 @@ const browser = await pw.webkit.launch({ headless: true });
 const report = [];
 try {
   const ctx = await browser.newContext({ ...pw.devices['iPhone 15'] });
-  await ctx.addInitScript(() => { try { localStorage.setItem('catan.settings', JSON.stringify({ speed: 'test', n: 4, seats: ['human', 'hard', 'medium', 'easy'] })); } catch (e) {} });
+  const nPl = +process.argv[5] || 4; // optional 4th arg: players (5-6 = big board + extra build)
+  await ctx.addInitScript(n => { try { localStorage.setItem('catan.settings', JSON.stringify({ speed: 'test', n, seats: ['human', 'hard', 'medium', 'easy', 'medium', 'easy'] })); } catch (e) {} }, nPl);
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));

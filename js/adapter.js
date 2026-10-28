@@ -10,8 +10,8 @@
   const order = c => 'KVRPM'.indexOf(c);
 
   const game = {
-    id: 'catan', minSeats: 3, maxSeats: 4,
-    // options: { rules: { board: 'random'|'beginner' }, levels: ['hard', ...] }
+    id: 'catan', minSeats: 3, maxSeats: 6,
+    // options: { rules: { board, vp, friendly, balanced }, levels: ['hard', ...] } (5-6 seats get the big board)
     setup(n, options, rng, seats) {
       const o = options || {}, lv = o.levels || [];
       const S = Array.from({ length: n }, (_, i) => {
