@@ -8,78 +8,59 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone@8.0.7/babel.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <script src="js/engine.js?v=1"></script>
+    <script src="js/tracker-board.js?v=1"></script>
+    <style>
+        html, body { margin: 0; height: 100%; }
+        body { overflow: hidden; -webkit-tap-highlight-color: transparent; }
+        svg text { user-select: none; -webkit-user-select: none; }
+        .pad { touch-action: manipulation; }
+    </style>
 </head>
 <body>
     <div id="root"><p style="padding:20px;">Loading... If this stays visible, check browser console (F12) for errors.</p></div>
     <script type="text/babel">
 const { useState, useMemo, useEffect, useRef } = React;
 
-const DiceChart = ({ chartData }) => {
-    const chartRef = useRef(null);
-    const chartInstance = useRef(null);
+const RES_LIST = ['wood', 'brick', 'sheep', 'wheat', 'ore'];
+// same little pictures as the game (js/app.js RES_ICON)
+const RES_ICON = {
+  wood: '<path d="M10 2l6 10H4z" fill="#2c5f2a"/><path d="M10 7l6 9H4z" fill="#3f7d3a"/><rect x="9" y="15" width="2" height="4" fill="#5a3b22"/>',
+  brick: '<rect x="2" y="5" width="16" height="10" fill="#b55a3c"/><path d="M2 10h16M8 5v5M13 10v5" stroke="#7d3522" stroke-width="1.3"/>',
+  sheep: '<ellipse cx="9" cy="11" rx="6.5" ry="4.6" fill="#f4f1e6"/><circle cx="15.5" cy="9" r="2.4" fill="#3b3b3b"/><path d="M6 15v3M11 15v3" stroke="#3b3b3b" stroke-width="1.4"/>',
+  wheat: '<path d="M10 19V5M6 18V8M14 18V8" stroke="#b78b26" stroke-width="1.6"/><ellipse cx="10" cy="4.5" rx="1.6" ry="3" fill="#e2b845"/><ellipse cx="6" cy="7.5" rx="1.4" ry="2.6" fill="#e2b845"/><ellipse cx="14" cy="7.5" rx="1.4" ry="2.6" fill="#e2b845"/>',
+  ore: '<path d="M1 18l7-13 5 7 2-3 4 9z" fill="#6c737c"/><path d="M6.3 8.2L8 5l2 2.8z" fill="#e9edf0"/>',
+};
+const ResIcon = ({ r, className = 'w-[18px] h-[18px]' }) => <svg viewBox="0 0 20 20" className={className} aria-hidden="true" dangerouslySetInnerHTML={{ __html: RES_ICON[r] }} />;
 
-    useEffect(() => {
-        if (chartInstance.current) {
-            chartInstance.current.destroy();
-        }
+const theoreticalProb = {2: 2.78, 3: 5.56, 4: 8.33, 5: 11.11, 6: 13.89, 7: 16.67, 8: 13.89, 9: 11.11, 10: 8.33, 11: 5.56, 12: 2.78};
+const NUMS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
-        const ctx = chartRef.current.getContext('2d');
-        chartInstance.current = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: chartData.map(d => d.roll),
-                datasets: [
-                    {
-                        label: 'Actual %',
-                        data: chartData.map(d => d.Actual),
-                        backgroundColor: '#3b82f6',
-                    },
-                    {
-                        label: 'Theoretical %',
-                        data: chartData.map(d => d.Theoretical),
-                        backgroundColor: '#ef4444',
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true, suggestedMax: 20 }
-                },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            afterLabel: (ctx) => {
-                                if (ctx.datasetIndex === 0) {
-                                    return `Count: ${chartData[ctx.dataIndex].count}`;
-                                }
-                                return '';
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        return () => {
-            if (chartInstance.current) {
-                chartInstance.current.destroy();
-            }
-        };
-    }, [chartData]);
-
+// small expected-vs-actual bars for 2-12 (expected red, actual blue, as the old chart)
+const DiceBars = ({ rolls, total }) => {
+    const pct = n => total ? rolls[n] / total * 100 : 0;
+    const top = Math.max(17, ...NUMS.map(pct));
     return (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-bold text-amber-800 mb-4">Probability Distribution</h2>
-            <div style={{height: '400px'}}>
-                <canvas ref={chartRef}></canvas>
+        <div className="flex flex-col h-full min-h-0" data-chart>
+            <div className="flex items-center gap-2 text-[11px] text-gray-600 leading-none mb-1">
+                <span className="font-bold text-amber-900 text-xs" data-total>{total} rolls</span>
+                <span className="ml-auto flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-sm" style={{background:'#ef4444'}}/>exp</span>
+                <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-sm" style={{background:'#3b82f6'}}/>actual</span>
+            </div>
+            <div className="flex-1 min-h-[44px] flex items-end gap-[3px]">
+                {NUMS.map(n => (
+                    <div key={n} className="flex-1 h-full flex items-end justify-center gap-px" title={`${n}: ${rolls[n]} of ${total}`}>
+                        <div className="w-1/2 rounded-t-sm" style={{height: `${theoreticalProb[n] / top * 100}%`, background: '#ef4444', opacity: .8}}/>
+                        <div className="w-1/2 rounded-t-sm" style={{height: `${pct(n) / top * 100}%`, background: '#3b82f6'}}/>
+                    </div>
+                ))}
+            </div>
+            <div className="flex gap-[3px] text-[10px] text-gray-600 leading-none mt-0.5">
+                {NUMS.map(n => <div key={n} className="flex-1 text-center">{n}</div>)}
             </div>
         </div>
     );
@@ -112,20 +93,21 @@ const getDefaultHexes = () => [
 { id: 18, resource: '', number: '', x: 200 + HEX_WIDTH * 2, y: 80 + HEX_HEIGHT * 4 }
 ];
 
-const [rolls, setRolls] = useState({2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0});
-const [showBoard, setShowBoard] = useState(false);
+// stage: 'start' (Random / Manual), 'manual' (builder), 'locked' (playing)
+const [stage, setStage] = useState('start');
+const [history, setHistory] = useState([]);
 const [hexes, setHexes] = useState(getDefaultHexes());
 const [vertices, setVertices] = useState({});
 const [edges, setEdges] = useState([]);
 const [selectedHex, setSelectedHex] = useState(null);
-const [isLocked, setIsLocked] = useState(false);
 const [settlements, setSettlements] = useState([]);
 const [roads, setRoads] = useState([]);
 const [ports, setPorts] = useState([]);
 const [selectedPlayer, setSelectedPlayer] = useState('red');
-const [placementMode, setPlacementMode] = useState(null);
+const [placementMode, setPlacementMode] = useState('settlement');
 const [autoPlaceMode, setAutoPlaceMode] = useState(false);
 const [autoPlaceStep, setAutoPlaceStep] = useState(0);
+const isLocked = stage === 'locked';
 
 const autoPlaceSequence = [
     {type: 'resource', value: 'wood', label: 'Wood', color: '#228B22'},
@@ -147,14 +129,14 @@ const autoPlaceSequence = [
 ];
 
 const playerColors = {red: '#DC2626', blue: '#2563EB', white: '#FFFFFF', orange: '#EA580C', green: '#16A34A', brown: '#92400E'};
-const theoreticalProb = {2: 2.78, 3: 5.56, 4: 8.33, 5: 11.11, 6: 13.89, 7: 16.67, 8: 13.89, 9: 11.11, 10: 8.33, 11: 5.56, 12: 2.78};
 const resourceColors = {wood: '#228B22', brick: '#B8433D', sheep: '#90EE90', wheat: '#F4C430', ore: '#708090', desert: '#D2B48C', '': '#F5F5DC'};
 const portTypes = ['3:1', 'wood', 'brick', 'sheep', 'wheat', 'ore'];
 
-const recordRoll = (n) => setRolls(p => ({...p, [n]: p[n] + 1}));
-const resetRolls = () => setRolls({2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0});
-const totalRolls = Object.values(rolls).reduce((a, b) => a + b, 0);
-const chartData = Object.keys(rolls).map(n => ({roll: n, Actual: totalRolls > 0 ? parseFloat((rolls[n] / totalRolls * 100).toFixed(2)) : 0, Theoretical: theoreticalProb[n], count: rolls[n]}));
+const rolls = useMemo(() => { const r = {}; NUMS.forEach(n => { r[n] = 0; }); history.forEach(n => { r[n]++; }); return r; }, [history]);
+const totalRolls = history.length;
+const recordRoll = (n) => setHistory(h => [...h, n]);
+const undoRoll = () => setHistory(h => h.slice(0, -1));
+const resetRolls = () => { if (!history.length || window.confirm('Clear all rolls?')) setHistory([]); };
 
 const potentialHexes = useMemo(() => {
 if (isLocked) return [];
@@ -170,9 +152,8 @@ return Array.from(potential.values());
 }, [hexes, isLocked]);
 
 const updateHex = (id, field, val) => {
-const newHexes = hexes.map(h => h.id === id ? {...h, [field]: val} : h);
+const newHexes = hexes.map(h => h.id === id ? {...h, [field]: val, ...(field === 'resource' && val === 'desert' ? {number: ''} : {})} : h);
 setHexes(newHexes);
-if (isLocked) calculateVerticesAndEdges(newHexes);
 };
 
 const addHexAtPosition = (x, y) => {
@@ -181,10 +162,8 @@ setHexes([...hexes, {id: newId, resource: '', number: '', x, y}]);
 };
 
 const removeHex = (id) => {
-const newHexes = hexes.filter(h => h.id !== id);
-setHexes(newHexes);
+setHexes(hexes.filter(h => h.id !== id));
 setSelectedHex(null);
-if (isLocked) calculateVerticesAndEdges(newHexes);
 };
 
 const startAutoPlace = () => {
@@ -197,60 +176,34 @@ setHexes(hexes.map(h => ({...h, resource: '', number: ''})));
 
 const handleAutoPlaceClick = (id) => {
 const currentStep = autoPlaceSequence[autoPlaceStep];
+const hex = hexes.find(h => h.id === id);
 if (currentStep.type === 'resource') {
-    const hex = hexes.find(h => h.id === id);
     // Toggle: if already this resource, remove it; otherwise set it
-    if (hex.resource === currentStep.value) {
-        setHexes(hexes.map(h => h.id === id ? {...h, resource: ''} : h));
-    } else {
-        setHexes(hexes.map(h => h.id === id ? {...h, resource: currentStep.value} : h));
-    }
+    setHexes(hexes.map(h => h.id === id ? {...h, resource: hex.resource === currentStep.value ? '' : currentStep.value} : h));
 } else {
     // Number step - only allow on hexes that have a resource (and not desert)
-    const hex = hexes.find(h => h.id === id);
     if (!hex.resource || hex.resource === 'desert') return;
-    // Toggle: if already this number, remove it; otherwise set it
-    if (hex.number === currentStep.value) {
-        setHexes(hexes.map(h => h.id === id ? {...h, number: ''} : h));
-    } else {
-        setHexes(hexes.map(h => h.id === id ? {...h, number: currentStep.value} : h));
-    }
+    setHexes(hexes.map(h => h.id === id ? {...h, number: hex.number === currentStep.value ? '' : currentStep.value} : h));
 }
 };
 
 const autoPlaceNext = () => {
-if (autoPlaceStep < autoPlaceSequence.length - 1) {
-    setAutoPlaceStep(autoPlaceStep + 1);
-} else {
-    // Done with all steps
-    setAutoPlaceMode(false);
-    setAutoPlaceStep(0);
-}
+if (autoPlaceStep < autoPlaceSequence.length - 1) setAutoPlaceStep(autoPlaceStep + 1);
+else { setAutoPlaceMode(false); setAutoPlaceStep(0); }
 };
 
-const autoPlaceCancel = () => {
-setAutoPlaceMode(false);
-setAutoPlaceStep(0);
-};
+const autoPlaceCancel = () => { setAutoPlaceMode(false); setAutoPlaceStep(0); };
 
 const resetBoard = () => {
 setHexes(getDefaultHexes());
 setSelectedHex(null);
 setAutoPlaceMode(false);
 setAutoPlaceStep(0);
-setIsLocked(false);
 setVertices({});
 setEdges([]);
 setSettlements([]);
 setRoads([]);
 setPorts([]);
-};
-
-const toggleLock = () => {
-const newLock = !isLocked;
-setIsLocked(newLock);
-if (newLock) calculateVerticesAndEdges(hexes);
-else { setVertices({}); setEdges([]); }
 };
 
 const getNumberProbability = (n) => ({2:1,3:2,4:3,5:4,6:5,8:5,9:4,10:3,11:2,12:1}[n] || 0);
@@ -278,44 +231,57 @@ setVertices(vMap);
 setEdges(Array.from(eSet).map(k => {const [v1,v2] = k.split('|'); return {v1,v2};}));
 };
 
+const lockBoard = (hexesData) => {
+setSelectedHex(null); setAutoPlaceMode(false); setAutoPlaceStep(0);
+calculateVerticesAndEdges(hexesData);
+setPlacementMode('settlement');
+setStage('locked');
+};
+
+const unlockBoard = () => { setVertices({}); setEdges([]); setStage('manual'); };
+
+const randomBoard = () => {
+const seed = (crypto.getRandomValues(new Uint32Array(1))[0]) || 1;
+const b = window.TrackerBoard.randomBoard(seed);
+setHexes(b.hexes); setPorts(b.ports); setSettlements([]); setRoads([]);
+lockBoard(b.hexes);
+};
+
 const getResourceTotals = () => {
-const t = {};
+const t = {wood:0,brick:0,sheep:0,wheat:0,ore:0};
 hexes.forEach(h => {
-if (h.resource && h.resource !== 'desert' && h.number) {
-t[h.resource] = (t[h.resource] || 0) + getNumberProbability(parseInt(h.number));
-}
+if (h.resource && h.resource !== 'desert' && h.number) t[h.resource] += getNumberProbability(parseInt(h.number));
 });
 return t;
 };
 
 const handleVertexClick = (k) => {
-if (!isLocked || placementMode !== 'settlement') return;
 const ex = settlements.find(s => s.vertex === k);
 setSettlements(ex ? settlements.filter(s => s.vertex !== k) : [...settlements, {vertex: k, player: selectedPlayer}]);
 };
 
 const handleEdgeClick = (e) => {
-if (!isLocked || placementMode !== 'road') return;
 const ek = [e.v1, e.v2].sort().join('|');
 const ex = roads.find(r => r.edge === ek);
 setRoads(ex ? roads.filter(r => r.edge !== ek) : [...roads, {edge: ek, player: selectedPlayer}]);
 };
 
+// tap an empty corner = 3:1 harbour; tap again to step through 2:1 types; after ore it is removed
 const handlePortClick = (k) => {
-if (!isLocked || placementMode !== 'port') return;
 const ex = ports.find(p => p.vertex === k);
-setPorts(ex ? ports.filter(p => p.vertex !== k) : [...ports, {vertex: k, type: '3:1'}]);
+if (!ex) return setPorts([...ports, {vertex: k, type: '3:1'}]);
+const next = portTypes.indexOf(ex.type) + 1;
+setPorts(next >= portTypes.length ? ports.filter(p => p.vertex !== k) : ports.map(p => p.vertex === k ? {...p, type: portTypes[next]} : p));
 };
-
-const updatePortType = (k, t) => setPorts(ports.map(p => p.vertex === k ? {...p, type: t} : p));
 
 const getPlayerStats = () => {
 const stats = {};
-Object.keys(playerColors).forEach(p => { stats[p] = {totalPoints: 0, resources: {wood:0,brick:0,sheep:0,wheat:0,ore:0}}; });
+Object.keys(playerColors).forEach(p => { stats[p] = {totalPoints: 0, count: 0, resources: {wood:0,brick:0,sheep:0,wheat:0,ore:0}}; });
 settlements.forEach(s => {
 const v = vertices[s.vertex];
 if (v) {
 stats[s.player].totalPoints += v.points;
+stats[s.player].count++;
 v.adjacentHexes.forEach(h => { stats[s.player].resources[h.resource] += h.pips; });
 }
 });
@@ -331,7 +297,17 @@ if (r >= 0.2) return '#FF6D00';
 return '#DD2C00';
 };
 
-const Hexagon = ({hex, onClick, isPotential, isAutoPlaceHighlight}) => {
+// board view box: fit the tiles (plus "+" spots while building) with room for harbour tags
+const view = useMemo(() => {
+const all = stage === 'manual' && !autoPlaceMode ? hexes.concat(potentialHexes) : hexes;
+const pts = all.length ? all : getDefaultHexes();
+const xs = pts.map(h => h.x), ys = pts.map(h => h.y), m = isLocked ? 22 : 6;
+const x0 = Math.min(...xs) - HEX_WIDTH / 2 - m, x1 = Math.max(...xs) + HEX_WIDTH / 2 + m;
+const y0 = Math.min(...ys) - HEX_SIZE - m, y1 = Math.max(...ys) + HEX_SIZE + m;
+return {x0, y0, w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2};
+}, [hexes, potentialHexes, stage, autoPlaceMode, isLocked]);
+
+const Hexagon = ({hex, onClick, isPotential, isAutoPlaceHighlight, faded}) => {
 const pts = [];
 for (let i = 0; i < 6; i++) {
 const a = (Math.PI / 3) * i - Math.PI / 2;
@@ -344,11 +320,11 @@ if (isPotential) return (
 <text textAnchor="middle" dy="5" fontSize="24" fill="#999" opacity="0.5">+</text>
 </g>
 );
-const showPointer = !isLocked || autoPlaceMode;
+const showPointer = stage === 'manual';
 const strokeColor = isAutoPlaceHighlight ? '#00FF00' : (selectedHex === hex.id ? '#FF6B6B' : '#000');
 const strokeW = isAutoPlaceHighlight ? 4 : (selectedHex === hex.id ? 3 : 1);
 return (
-<g transform={`translate(${hex.x},${hex.y})`} onClick={onClick} style={{cursor: showPointer ? 'pointer' : 'default'}}>
+<g transform={`translate(${hex.x},${hex.y})`} onClick={onClick} style={{cursor: showPointer ? 'pointer' : 'default'}} opacity={faded ? 0.45 : 1}>
 <polygon points={pts.join(' ')} fill={resourceColors[hex.resource] || resourceColors['']} stroke={strokeColor} strokeWidth={strokeW}/>
 {hex.resource && hex.resource !== 'desert' && hex.number && (<><circle r="18" fill="white"/><text textAnchor="middle" dy="6" fontSize="20" fontWeight="bold" fill={isRed ? '#DC143C' : '#000'}>{hex.number}</text></>)}
 {hex.resource === 'desert' && <text textAnchor="middle" dy="5" fontSize="14" fontWeight="bold" fill="#8B4513">D</text>}
@@ -356,111 +332,15 @@ return (
 );
 };
 
-return (
-<div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4">
-<div className="max-w-7xl mx-auto">
-<h1 className="text-4xl font-bold text-amber-900 mb-6 text-center">Catan Statistics Tracker</h1>
-<div className="flex gap-4 mb-6 justify-center">
-<button onClick={() => setShowBoard(false)} className={`px-6 py-2 rounded-lg font-semibold transition ${!showBoard ? 'bg-amber-700 text-white' : 'bg-white text-amber-700'}`}>Dice Tracker</button>
-<button onClick={() => setShowBoard(true)} className={`px-6 py-2 rounded-lg font-semibold transition ${showBoard ? 'bg-amber-700 text-white' : 'bg-white text-amber-700'}`}>Board Builder</button>
-</div>
+const btn = 'rounded-lg font-semibold shadow-sm';
+const stats = isLocked ? getPlayerStats() : null;
+const placed = stats ? Object.entries(stats).filter(([, s]) => s.count > 0) : [];
+const totals = getResourceTotals();
 
-{!showBoard ? (
-<div className="space-y-6">
-<div className="bg-white rounded-lg shadow-lg p-6">
-<div className="flex justify-between items-center mb-4">
-<h2 className="text-2xl font-bold text-amber-800">Record Dice Rolls</h2>
-<div className="flex gap-3 items-center">
-<span className="text-lg font-semibold">Total: {totalRolls}</span>
-<button onClick={resetRolls} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Reset</button>
-</div>
-</div>
-<div className="grid grid-cols-11 gap-2">
-{Object.keys(rolls).map(n => (
-<button key={n} onClick={() => recordRoll(parseInt(n))} className="aspect-square bg-gradient-to-br from-amber-600 to-amber-800 text-white rounded-lg text-lg sm:text-2xl font-bold hover:from-amber-700 hover:to-amber-900 shadow-md hover:shadow-lg transform hover:scale-105">{n}</button>
-))}
-</div>
-<div className="grid grid-cols-11 gap-2 mt-2">
-{Object.entries(rolls).map(([n, c]) => <div key={n} className="text-center text-sm font-semibold text-gray-700">{c}</div>)}
-</div>
-</div>
-<DiceChart chartData={chartData} />
-</div>
-) : (
-<div className="space-y-6">
-<div className="bg-white rounded-lg shadow-lg p-6">
-<div className="flex justify-between items-center mb-4">
-<h2 className="text-2xl font-bold text-amber-800">Build Your Board</h2>
-<div className="flex gap-2">
-<button onClick={resetBoard} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold">
-Reset Board
-</button>
-<button onClick={toggleLock} className={`px-6 py-2 rounded-lg font-semibold ${isLocked ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}>
-{isLocked ? 'Unlock' : 'Lock & Calculate'}
-</button>
-</div>
-</div>
-
-{!isLocked && !autoPlaceMode && (
-<div className="mb-4 space-y-3">
-<p className="text-amber-700 font-semibold">Add/remove tiles to set up board shape, then use Auto Place for quick setup.</p>
-<div className="flex gap-3 items-center flex-wrap">
-<button onClick={startAutoPlace} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold">
-Auto Place
-</button>
-</div>
-</div>
-)}
-
-{autoPlaceMode && (
-<div className="mb-4 p-4 bg-blue-100 border-2 border-blue-400 rounded-lg">
-<div className="flex justify-between items-center mb-3">
-<h3 className="text-xl font-bold text-blue-800">
-Step {autoPlaceStep + 1}/{autoPlaceSequence.length}: {autoPlaceSequence[autoPlaceStep].type === 'resource' ? 'Resources' : 'Numbers'}
-</h3>
-<button onClick={autoPlaceCancel} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded font-semibold text-sm">
-Cancel
-</button>
-</div>
-<p className="text-lg font-semibold mb-3" style={{color: autoPlaceSequence[autoPlaceStep].color || '#1e40af'}}>
-Tap all <span className="text-2xl">{autoPlaceSequence[autoPlaceStep].label}</span> tiles
-{autoPlaceSequence[autoPlaceStep].type === 'number' && <span className="text-sm text-gray-600 ml-2">(only on resource tiles)</span>}
-</p>
-<div className="flex gap-3">
-<button onClick={autoPlaceNext} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold">
-{autoPlaceStep < autoPlaceSequence.length - 1 ? 'Next' : 'Finish'}
-</button>
-<button onClick={autoPlaceNext} className="px-6 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded-lg font-semibold">
-None
-</button>
-</div>
-<div className="mt-2 text-sm text-gray-600">
-Tap tiles to select/deselect. Click Next when done, or None if there are no {autoPlaceSequence[autoPlaceStep].label} tiles.
-</div>
-</div>
-)}
-
-{isLocked && (
-<div className="mb-4 space-y-3">
-<div className="flex gap-2 items-center flex-wrap">
-<span className="font-semibold">Player:</span>
-{Object.entries(playerColors).map(([c, hex]) => (
-<button key={c} aria-label={`${c} player`} onClick={() => setSelectedPlayer(c)} className={`w-10 h-10 rounded-full ${selectedPlayer === c ? 'ring-4 ring-black' : 'ring-2 ring-gray-300'}`} style={{backgroundColor: hex}}/>
-))}
-</div>
-<div className="flex gap-2 flex-wrap">
-<button onClick={() => setPlacementMode(placementMode === 'settlement' ? null : 'settlement')} className={`px-4 py-2 rounded-lg font-semibold ${placementMode === 'settlement' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>Settlement</button>
-<button onClick={() => setPlacementMode(placementMode === 'road' ? null : 'road')} className={`px-4 py-2 rounded-lg font-semibold ${placementMode === 'road' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>Road</button>
-<button onClick={() => setPlacementMode(placementMode === 'port' ? null : 'port')} className={`px-4 py-2 rounded-lg font-semibold ${placementMode === 'port' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>Port</button>
-</div>
-</div>
-)}
-
-<div className="flex flex-col lg:flex-row gap-6">
-<div className="flex-1 bg-amber-50 rounded-lg p-4 border-2 border-amber-300">
-<div style={{width: '100%', height: '600px', overflow: 'auto'}}>
-<svg width="600" height="500" className="mx-auto">
-{!isLocked && !autoPlaceMode && potentialHexes.map((pos, i) => <Hexagon key={`p-${i}`} hex={pos} isPotential onClick={() => addHexAtPosition(pos.x, pos.y)}/>)}
+const board = (
+<div className="relative flex-1 min-h-0 bg-amber-50 rounded-lg border-2 border-amber-300 overflow-hidden" data-board>
+<svg viewBox={`${view.x0} ${view.y0} ${view.w} ${view.h}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full block" style={{touchAction: 'manipulation'}}>
+{stage === 'manual' && !autoPlaceMode && potentialHexes.map((pos, i) => <Hexagon key={`p-${i}`} hex={pos} isPotential onClick={() => addHexAtPosition(pos.x, pos.y)}/>)}
 {hexes.map(hex => {
 const currentStep = autoPlaceSequence[autoPlaceStep];
 const isHighlight = autoPlaceMode && (
@@ -468,44 +348,98 @@ const isHighlight = autoPlaceMode && (
     (currentStep.type === 'number' && hex.number === currentStep.value)
 );
 const handleClick = () => {
-    if (autoPlaceMode) {
-        handleAutoPlaceClick(hex.id);
-    } else if (!isLocked) {
-        setSelectedHex(hex.id);
-    }
+    if (autoPlaceMode) handleAutoPlaceClick(hex.id);
+    else if (stage === 'manual') setSelectedHex(hex.id);
 };
-return <Hexagon key={hex.id} hex={hex} onClick={handleClick} isAutoPlaceHighlight={isHighlight}/>;
+return <Hexagon key={hex.id} hex={hex} onClick={handleClick} isAutoPlaceHighlight={isHighlight} faded={stage === 'start'}/>;
 })}
 {isLocked && edges.map((e, i) => {
 const v1 = vertices[e.v1], v2 = vertices[e.v2];
 if (!v1 || !v2) return null;
 const ek = [e.v1, e.v2].sort().join('|');
 const road = roads.find(r => r.edge === ek);
-return <line key={i} x1={v1.x} y1={v1.y} x2={v2.x} y2={v2.y} stroke={road ? playerColors[road.player] : '#CCC'} strokeWidth={road ? 4 : 1} style={{cursor: placementMode === 'road' ? 'pointer' : 'default'}} onClick={() => handleEdgeClick(e)}/>;
+const live = placementMode === 'road';
+return (
+<g key={i} style={{cursor: live ? 'pointer' : 'default', pointerEvents: live ? 'auto' : 'none'}} onClick={() => handleEdgeClick(e)} data-edge={ek}>
+<line x1={v1.x} y1={v1.y} x2={v2.x} y2={v2.y} stroke={road ? playerColors[road.player] : '#CCC'} strokeWidth={road ? 6 : 1}/>
+{road && road.player === 'white' && <line x1={v1.x} y1={v1.y} x2={v2.x} y2={v2.y} stroke="#555" strokeWidth="1" strokeDasharray="2,3"/>}
+<line x1={v1.x} y1={v1.y} x2={v2.x} y2={v2.y} stroke="transparent" strokeWidth="14"/>
+</g>
+);
 })}
 {isLocked && Object.entries(vertices).map(([k, v]) => {
 const sett = settlements.find(s => s.vertex === k);
 const port = ports.find(p => p.vertex === k);
+const live = placementMode === 'settlement' || placementMode === 'port';
+const dx = v.x - view.cx, dy = v.y - view.cy, d = Math.hypot(dx, dy) || 1;
+const tx = v.x + dx / d * 17, ty = v.y + dy / d * 17;
+const tag = port && (port.type === '3:1' ? '3:1' : '2:1');
 return (
-<g key={k}>
-<circle cx={v.x} cy={v.y} r={sett ? 12 : 8} fill={sett ? playerColors[sett.player] : getVertexColor(v.points)} opacity="0.9" stroke={sett ? '#000' : (port ? '#FFD700' : '#000')} strokeWidth={port ? 3 : 1} style={{cursor: (placementMode === 'settlement' || placementMode === 'port') ? 'pointer' : 'default'}} onClick={() => { if (placementMode === 'settlement') handleVertexClick(k); if (placementMode === 'port') handlePortClick(k); }}/>
+<g key={k} data-vertex={k} style={{cursor: live ? 'pointer' : 'default', pointerEvents: live ? 'auto' : 'none'}} onClick={() => { if (placementMode === 'settlement') handleVertexClick(k); if (placementMode === 'port') handlePortClick(k); }}>
+<circle cx={v.x} cy={v.y} r="15" fill="transparent"/>
+<circle cx={v.x} cy={v.y} r={sett ? 12 : 8} fill={sett ? playerColors[sett.player] : getVertexColor(v.points)} opacity="0.9" stroke={sett ? '#000' : (port ? '#FFD700' : '#000')} strokeWidth={port ? 3 : 1}/>
 {!sett && <text x={v.x} y={v.y} textAnchor="middle" dy="4" fontSize="11" fontWeight="bold" fill="#FFF" style={{pointerEvents: 'none'}}>{v.points}</text>}
-{port && <text x={v.x} y={v.y - 15} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#000" style={{pointerEvents: 'none'}}>{port.type}</text>}
+{port && (
+<g style={{pointerEvents: 'none'}}>
+<rect x={tx - 11} y={ty - 7} width="22" height="14" rx="4" fill={port.type === '3:1' ? '#FFFFFF' : resourceColors[port.type]} stroke="#7c2d12" strokeWidth="1"/>
+<text x={tx} y={ty} dy="3.5" textAnchor="middle" fontSize="9.5" fontWeight="bold" fill={port.type === 'ore' || port.type === 'brick' || port.type === 'wood' ? '#FFF' : '#000'}>{tag}</text>
+</g>
+)}
 </g>
 );
 })}
 </svg>
+{stage === 'start' && (
+<div className="absolute inset-0 flex items-center justify-center gap-3 p-4">
+<button onClick={randomBoard} className={`${btn} px-6 py-4 text-xl bg-gradient-to-br from-amber-600 to-amber-800 text-white`} data-act="random">Random</button>
+<button onClick={() => setStage('manual')} className={`${btn} px-6 py-4 text-xl bg-white text-amber-800 border-2 border-amber-700`} data-act="manual">Manual</button>
 </div>
+)}
+{isLocked && (
+<button onClick={unlockBoard} className="absolute top-1 right-1 px-2.5 py-1 text-sm rounded-md bg-white/90 text-amber-800 border border-amber-300 font-semibold" data-act="edit">Edit</button>
+)}
 </div>
+);
 
-<div className="w-72 bg-amber-50 rounded-lg p-4 border-2 border-amber-300">
-{selectedHex !== null && !isLocked ? (
-<div>
-<h3 className="font-bold text-lg mb-3">Edit Hex</h3>
-<div className="space-y-3">
-<div>
-<label className="block text-sm font-semibold mb-1">Resource</label>
-<select aria-label="Resource" value={hexes.find(h => h.id === selectedHex)?.resource || ''} onChange={(e) => updateHex(selectedHex, 'resource', e.target.value)} className="w-full p-2 border rounded">
+const playerBar = isLocked && (
+<div className="flex items-center gap-1 lg:gap-2 flex-wrap pl-1" data-players>
+{Object.entries(playerColors).map(([c, hex]) => (
+<button key={c} aria-label={`${c} player`} onClick={() => setSelectedPlayer(c)} className={`w-6 h-6 lg:w-8 lg:h-8 rounded-full shrink-0 ${selectedPlayer === c ? 'ring-[3px] ring-black' : 'ring-1 ring-gray-400'}`} style={{backgroundColor: hex}}/>
+))}
+<div className="ml-auto flex rounded-lg overflow-hidden border border-amber-700 text-[13px] lg:text-base">
+{[['settlement', 'Settlement'], ['road', 'Road'], ['port', 'Port']].map(([m, label]) => (
+<button key={m} onClick={() => setPlacementMode(m)} className={`px-2 lg:px-4 py-1 font-semibold ${placementMode === m ? 'bg-amber-700 text-white' : 'bg-white text-amber-800'}`} data-mode={m}>{label}</button>
+))}
+</div>
+</div>
+);
+
+const builderBar = stage === 'manual' && (
+<div className="flex gap-1 lg:gap-1.5 flex-wrap items-center text-xs lg:text-sm">
+<button onClick={startAutoPlace} className={`${btn} px-2 lg:px-3 py-1.5 bg-green-600 text-white`} disabled={autoPlaceMode}>Auto Place</button>
+<button onClick={randomBoard} className={`${btn} px-2 lg:px-3 py-1.5 bg-white text-amber-800 border border-amber-700`}>Random</button>
+<button onClick={resetBoard} className={`${btn} px-2 lg:px-3 py-1.5 bg-gray-500 text-white`}>Reset Board</button>
+<button onClick={() => lockBoard(hexes)} className={`${btn} px-2 lg:px-4 py-1.5 bg-green-700 text-white ml-auto`} data-act="lock">Lock & Calculate</button>
+</div>
+);
+
+const builderPanel = stage === 'manual' && (
+autoPlaceMode ? (
+<div className="p-2.5 bg-blue-100 border-2 border-blue-400 rounded-lg">
+<div className="flex items-center gap-2 mb-1">
+<h3 className="font-bold text-blue-800">Step {autoPlaceStep + 1}/{autoPlaceSequence.length}</h3>
+<p className="font-semibold" style={{color: autoPlaceSequence[autoPlaceStep].color || '#1e40af'}}>Tap all <span className="text-lg">{autoPlaceSequence[autoPlaceStep].label}</span> tiles</p>
+</div>
+<div className="flex gap-2">
+<button onClick={autoPlaceNext} className={`${btn} px-5 py-1.5 bg-blue-600 text-white`}>{autoPlaceStep < autoPlaceSequence.length - 1 ? 'Next' : 'Finish'}</button>
+<button onClick={autoPlaceNext} className={`${btn} px-4 py-1.5 bg-gray-400 text-white`}>None</button>
+<button onClick={autoPlaceCancel} className={`${btn} px-3 py-1.5 bg-gray-500 text-white ml-auto text-sm`}>Cancel</button>
+</div>
+</div>
+) : selectedHex !== null && hexes.some(h => h.id === selectedHex) ? (
+<div className="flex gap-2 items-end bg-amber-50 rounded-lg p-2 border-2 border-amber-300">
+<label className="flex-1 text-xs font-semibold">Resource
+<select aria-label="Resource" value={hexes.find(h => h.id === selectedHex)?.resource || ''} onChange={(e) => updateHex(selectedHex, 'resource', e.target.value)} className="w-full p-1.5 border rounded text-sm bg-white">
 <option value="">None</option>
 <option value="wood">Wood</option>
 <option value="brick">Brick</option>
@@ -514,79 +448,90 @@ return (
 <option value="ore">Ore</option>
 <option value="desert">Desert</option>
 </select>
-</div>
-<div>
-<label className="block text-sm font-semibold mb-1">Number</label>
-<select aria-label="Number" value={hexes.find(h => h.id === selectedHex)?.number || ''} onChange={(e) => updateHex(selectedHex, 'number', e.target.value)} className="w-full p-2 border rounded" disabled={hexes.find(h => h.id === selectedHex)?.resource === 'desert'}>
+</label>
+<label className="w-20 text-xs font-semibold">Number
+<select aria-label="Number" value={hexes.find(h => h.id === selectedHex)?.number || ''} onChange={(e) => updateHex(selectedHex, 'number', e.target.value)} className="w-full p-1.5 border rounded text-sm bg-white" disabled={hexes.find(h => h.id === selectedHex)?.resource === 'desert'}>
 <option value="">None</option>
 {[2,3,4,5,6,8,9,10,11,12].map(n => <option key={n} value={n}>{n}</option>)}
 </select>
-</div>
-<button onClick={() => removeHex(selectedHex)} className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Remove Hex</button>
-</div>
-</div>
-) : isLocked && placementMode === 'port' && ports.length > 0 ? (
-<div>
-<h3 className="font-bold text-lg mb-3">Port Settings</h3>
-{ports.map((p, i) => (
-<div key={i} className="mb-2 p-2 bg-white rounded border">
-<select aria-label="Port type" value={p.type} onChange={(e) => updatePortType(p.vertex, e.target.value)} className="w-full p-1 border rounded text-sm">
-{portTypes.map(t => <option key={t} value={t}>{t}</option>)}
-</select>
-</div>
-))}
+</label>
+<button onClick={() => removeHex(selectedHex)} className={`${btn} px-3 py-1.5 bg-red-600 text-white text-sm`}>Remove Hex</button>
 </div>
 ) : (
-<div className="text-center text-gray-500 mt-10">
-<p>{isLocked ? 'Select player and placement mode' : 'Select a hex to edit'}</p>
-</div>
-)}
-</div>
-</div>
-</div>
+<p className="text-sm text-gray-500 text-center py-1">Tap a tile to edit, or a + to add one</p>
+)
+);
 
-{isLocked && Object.keys(vertices).length > 0 && (
-<>
-<div className="bg-white rounded-lg shadow-lg p-6">
-<h2 className="text-2xl font-bold text-amber-800 mb-4">Player Statistics</h2>
-<div className="space-y-4">
-{Object.entries(getPlayerStats()).map(([player, stats]) => {
-if (stats.totalPoints === 0) return null;
-return (
-<div key={player} className="border-2 rounded-lg p-4" style={{borderColor: playerColors[player]}}>
-<div className="flex items-center gap-3 mb-2">
-<div className="w-8 h-8 rounded-full" style={{backgroundColor: playerColors[player], border: player === 'white' ? '2px solid #000' : 'none'}}></div>
-<h3 className="text-xl font-bold capitalize">{player}</h3>
-<span className="ml-auto text-2xl font-bold">{stats.totalPoints} pips</span>
+// resource pips: whole table, then each player with a settlement
+const cell = 'w-6 lg:w-11 text-center tabular-nums';
+const summary = isLocked && (
+<div className="text-sm lg:text-lg leading-tight" data-summary>
+<div className="flex items-center gap-0.5 pb-0.5">
+<span className="w-9 lg:w-16"/>
+{RES_LIST.map(r => <span key={r} className={`${cell} flex justify-center`} title={r}><ResIcon r={r} className="w-[17px] h-[17px] lg:w-6 lg:h-6"/></span>)}
+<span className={`${cell} text-xs text-gray-500`}>all</span>
 </div>
-<div className="grid grid-cols-5 gap-2 mt-2">
-{Object.entries(stats.resources).map(([res, pips]) => pips > 0 && (
-<div key={res} className="text-center p-2 rounded" style={{backgroundColor: resourceColors[res] + '40'}}>
-<div className="text-xs capitalize font-semibold">{res}</div>
-<div className="text-lg font-bold">{pips}</div>
+<div className="flex items-center gap-0.5 py-0.5 border-t border-amber-200 font-bold text-amber-900" data-row="table">
+<span className="w-9 lg:w-16 text-xs lg:text-base">Table</span>
+{RES_LIST.map(r => <span key={r} className={cell}>{totals[r]}</span>)}
+<span className={cell}>{RES_LIST.reduce((a, r) => a + totals[r], 0)}</span>
+</div>
+{placed.map(([p, s]) => (
+<div key={p} className="flex items-center gap-0.5 py-0.5 border-t border-amber-100" data-row={p}>
+<span className="w-9 lg:w-16 flex items-center gap-1"><i className="inline-block w-3.5 h-3.5 lg:w-5 lg:h-5 rounded-full" style={{background: playerColors[p], border: '1px solid #444'}}/><span className="text-[11px] lg:text-sm text-gray-500">{s.count}</span></span>
+{RES_LIST.map(r => <span key={r} className={`${cell} ${s.resources[r] ? '' : 'text-gray-300'}`}>{s.resources[r]}</span>)}
+<span className={`${cell} font-bold`}>{s.totalPoints}</span>
 </div>
 ))}
-</div>
+{!placed.length && <p className="text-xs text-gray-500 pt-1">Tap corners to place</p>}
 </div>
 );
-})}
-</div>
-</div>
-<div className="bg-white rounded-lg shadow-lg p-6">
-<h2 className="text-2xl font-bold text-amber-800 mb-4">Resource Totals</h2>
-<div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-{Object.entries(getResourceTotals()).map(([res, total]) => (
-<div key={res} className="rounded-lg p-4 text-center border-2" style={{backgroundColor: resourceColors[res] + '40', borderColor: resourceColors[res]}}>
-<div className="text-lg font-bold capitalize">{res}</div>
-<div className="text-3xl font-bold" style={{color: resourceColors[res]}}>{total} pips</div>
-</div>
+
+// tap pad: 2-7 on top, 8-12 + undo below; the small number is how often it came up
+const dicePad = (
+<div className="pad grid grid-cols-6 gap-1.5" data-pad>
+{NUMS.map(n => (
+<button key={n} onClick={() => recordRoll(n)} className="h-11 lg:h-16 bg-gradient-to-br from-amber-600 to-amber-800 text-white rounded-lg shadow-md active:scale-95 transition-transform flex flex-col items-center justify-center leading-none" data-roll={n}>
+<span className="text-xl lg:text-3xl font-bold">{n}</span>
+<span className="text-[10px] lg:text-xs opacity-80 mt-0.5">{rolls[n]}</span>
+</button>
 ))}
+<button onClick={undoRoll} disabled={!totalRolls} className="h-11 lg:h-16 rounded-lg bg-white border-2 border-amber-700 text-amber-800 font-semibold text-sm lg:text-lg disabled:opacity-40 active:scale-95 transition-transform flex flex-col items-center justify-center leading-none" data-act="undo">
+<span>Undo</span>{totalRolls > 0 && <span className="text-[10px] opacity-70 mt-0.5">{history[history.length - 1]}</span>}
+</button>
+</div>
+);
+
+const chartBox = (
+<div className="relative bg-white rounded-lg shadow p-2 h-[104px] lg:h-[200px]">
+<DiceBars rolls={rolls} total={totalRolls}/>
+</div>
+);
+
+const resetLink = <button onClick={resetRolls} className="text-xs text-red-700 font-semibold px-1" data-act="reset-rolls">Clear rolls</button>;
+
+return (
+<div className="h-[100dvh] bg-gradient-to-br from-amber-50 to-orange-100 p-2 lg:p-4 flex flex-col lg:flex-row gap-2 lg:gap-4 overflow-hidden">
+{/* board column */}
+<div className={`flex flex-col gap-2 min-h-0 lg:flex-1 ${stage === 'manual' ? 'flex-[3]' : 'flex-1'}`}>
+{playerBar}
+{builderBar}
+{board}
+<div className="lg:hidden">{builderPanel}</div>
+</div>
+{/* side column (laptop) / strip under the board (phone) */}
+<div className={`flex flex-col gap-2 lg:w-[360px] lg:shrink-0 min-h-0 ${stage === 'manual' ? 'max-lg:hidden' : ''}`}>
+<div className="hidden lg:block">{builderPanel}</div>
+{isLocked ? (
+<div className="flex gap-2 items-stretch lg:flex-col">
+<div className="bg-white rounded-lg shadow px-2 py-1.5 shrink-0 max-h-[150px] lg:max-h-none overflow-y-auto">{summary}</div>
+<div className="flex-1 min-w-0 flex flex-col">
+<div className="flex-1">{chartBox}</div>
 </div>
 </div>
-</>
-)}
-</div>
-)}
+) : chartBox}
+<div className="flex justify-end -mb-1">{resetLink}</div>
+{dicePad}
 </div>
 </div>
 );
