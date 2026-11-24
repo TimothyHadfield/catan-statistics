@@ -1,7 +1,7 @@
 # Catan: progress
 
 ## START HERE
-Last updated 2026-11-24 (42 tests pass). Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
+Last updated 2026-11-24, late (42/42 `node --test "tests/*.test.*"`; ui-check 4p + 6p, 5 sizes, no page scroll, no errors; live 75d0fc4). Versions now style.css v6, app.js v8. Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
 
 ## Goal right now
 Catan is a playable base game vs computer, 3–6 players, with online rooms (friend codes, ON since 2026-10-27, Tim's go: "enable it to all games for now and we can disable it later if it becomes too much"). Wave 3 (2026-10-28, Tim: "Just make the games better") added 5–6 players, house-rule options and Learn videos.
@@ -19,7 +19,9 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 | Phone 393 / SE 320 / landscape / 1280 / 1440 | No page scroll at 4 and 6 players. Number tokens 4p: 13.7 / 9.5 / 12 / 28 / 33 px; 6p: 12.3 / 8.5 / 10.7 / 26 / 30 px (zoom button for SE) |
 | Tabs renamed **Online play / In-person play** (2026-11-24) | Live c3d2289 |
 | **In-person play** (`tracker.html`, one page) | Live 2026-11-24: board on top, Random (legal board, `js/tracker-board.js`) or Manual (builder); lock hides builder, Edit unlocks (with Back). Side summary (Table + per player pips), small exp/actual dice bars, 2–12 boxes at bottom. Weighted switch (`js/weights.js`; Table row shows weights ×N). Blocked corners show a grey dot. ◀ top-left undoes anything (`js/undo.js`, 200 steps, not saved). Game saved in localStorage after every change. Photo button removed earlier |
-| **Online play extras** (2026-11-24) | Odds + Weighted switches in the "Place a town" heading (also in Settings); harbour tokens turned square to the coast (0 covered); live cards box (own hand by resource, others by count; phone: in Dice sheet); no odds on blocked corners; ◀ undoes UI choices + own local-game builds/trades until anyone moves, greyed otherwise (online.js has no take-back) |
+| **Online play extras** (2026-11-24) | Odds + Weighted switches in the "Place a town"/"Place a road" heading and main-phase road mode (also in Settings); harbour tokens turned square to the coast (0 covered); no odds on blocked corners; ◀ undoes UI choices + own local-game builds/trades until anyone moves, greyed otherwise (online.js has no take-back) |
+| **Online odds while building roads** (75d0fc4) | With Odds on, every open corner shows its dots whenever you're not placing a town (look-only `.odds-p`, `pointer-events:none`) |
+| **Online dots table** (75d0fc4) | `dotsHTML(c, cards)` in app.js = In-person summary layout: Weighted switch, icon header, bold warm Table row (×weights when Weighted), per player colour dot + towns, grey zeros, bold all; laptop side box `#dotsBox` adds a cards-held column (replaced the hands box); phone: in the Dice sheet between chart and hands. Player dots: city ×2, robber tile 0, × weight when on. Feed shows `8 - n` lines at 5–6p so 6p fits 1280×800 |
 | Online rooms (`_online` v2) | **ON** (`ONLINE=true` in app.js). ~507 writes / 1,120 reads per 4p game (kit harness). 5–6p cost not measured. |
 
 ## Authorized next steps
@@ -31,6 +33,7 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 - Tim (2026-10-28): "Just make the games better." Base rules stay the default; variants only behind options. Original art and generic names (no "Seafarers"/extension trademarks).
 - Keep the tracker as its own tab (Tim uses it at real tables).
 - Tim (2026-11-24): "The two sections should be online play and in-person play"; odds numbers "should be a lever ... and they should never cover the little port simbles"; in-person: "combine the dice tracker and the board builder pages ... "random" button ... "manual" ..."; "make the resource totals for each player shown on the side ... live"; "weighted" numbers (scarce resource = more valuable, "you decide" the maths); no vertex sums where a settlement can't be built; "a universal back button in the top left".
+- Tim (2026-11-24, later): "for online play, don't remove the probability tiles when you're supposed to build a road, always make them available if the user wants them"; "show the totals probability points of each resource in online play, just like for each user"; "Make it very similar to in-person play. The two designs should be virtually the same, but the in-person you touch the specific things manually."
 
 ## Traps
 - **online.js cache stamp (2026-10-27):** every import of `js/online.js` uses `?v=a3d0418b`, the `_online` content stamp. After a re-copy: put the new stamp from `node ../_online/tools/stamp.mjs` there, bump the importing file's `?v=` (and pwa.js `data-version`), then `node ../_online/tools/stamp.mjs --check .` must say OK.
@@ -52,12 +55,14 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 - 2026-10-28 friendly robber: may not touch a player on 2 public points or fewer; if every tile is blocked, any tile is allowed.
 - 2026-10-28 balanced board: same resources never touch, same numbers never touch, 6/8 never touch, no corner over 12 dots.
 - 2026-11-24 weight per resource = clamp((mean pips per resource)/(its pips), 0.5, 2), 0 pips → 2; weighted corner sums shown as whole numbers in both modes.
+- 2026-11-24 online dots table keeps the dark theme (In-person is light) but copies its structure and sizes; online shows dot + town count instead of player names, like In-person.
 - 2026-10-28 "of N" shown next to your points when points-to-win isn't 10; phone seats hide dev/knight counts in 5–6p games.
 
 ## NOT verified
 - Real iPhone (Safari engine at 393 only). Sounds not heard by a person.
 - Online play on two real iPhones; a 5–6 seat online room only in the local `_online` test, not on real Firestore. 5–6p Firestore cost per game not measured (more seats = more writes).
 - Pass-the-phone with 2+ people only lightly checked headless.
+- Whether Tim finds the dark online dots table "virtually the same" as the light In-person one (he may want the light card look).
 
 ## Rejected / parked
 - ~~Online rooms off by default~~: switched on 2026-10-27 (Tim's go); `ONLINE=false` turns it off again.
