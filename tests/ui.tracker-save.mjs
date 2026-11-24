@@ -44,7 +44,7 @@ await page.click('[data-mode=port]');
 await page.dispatchEvent(`[data-vertex="${verts[0]}"]`, 'click'); // 3:1 on a new corner (or steps an existing one)
 await page.click('[data-mode=settlement]');
 for (const n of [6, 8, 7, 5, 9, 7, 4, 10]) await page.click(`[data-roll="${n}"]`);
-await page.click('[data-act=undo]');
+await page.click('[data-act=undo-all]'); // ◀ takes back the last roll
 const before = await snap();
 check(before.rows.length === 3 && before.roads === 1 && before.total === '7 rolls', `played: ${JSON.stringify(before.rows)} roads ${before.roads} ${before.total}`);
 
@@ -78,6 +78,49 @@ check(manual.length === 19 && manual.every(f => f === '#F5F5DC'), 'Edit -> Manua
 await page.reload();
 await page.waitForSelector('[data-act=lock]', { timeout: 30000 });
 check(true, 'manual stage survives reload');
+
+// ---- distance rule, Weighted and the ◀ history, on a fresh page
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForSelector('[data-act=random]', { timeout: 30000 });
+check(await page.$eval('[data-act=undo-all]', b => b.disabled), '◀ greyed out with nothing to undo');
+const states = []; // page snapshot before each action, newest last
+const act = async (name, fn) => { states.push({ name, s: await snap() }); await fn(); };
+await act('random', () => page.click('[data-act=random]'));
+const vs = await page.$$eval('[data-vertex]', gs => gs.map(g => g.dataset.vertex));
+const nb = await page.evaluate(k => { // corners one road away from k
+  return [...document.querySelectorAll('[data-edge]')].map(g => g.dataset.edge.split('|')).filter(e => e.includes(k)).map(e => (e[0] === k ? e[1] : e[0]));
+}, vs[30]);
+const sumShown = k => page.$eval(`[data-vertex="${k}"]`, g => !!g.querySelector('[data-sum]'));
+check(await sumShown(vs[30]) && (await Promise.all(nb.map(sumShown))).every(Boolean), 'all corner sums shown before placing');
+await act('settlement', () => page.dispatchEvent(`[data-vertex="${vs[30]}"]`, 'click'));
+check(nb.length >= 2 && !(await Promise.all(nb.map(sumShown))).some(Boolean), `no sums on the ${nb.length} corners next to a settlement`);
+const tableRaw = (await snap()).rows[0];
+const sumsRaw = await page.$$eval('[data-sum]', ts => ts.map(t => t.textContent).join());
+await act('weighted', () => page.click('[data-act=weighted]'));
+const wSnap = await snap();
+const sumsW = await page.$$eval('[data-sum]', ts => ts.map(t => t.textContent).join());
+check(wSnap.rows[0] !== tableRaw && sumsW !== sumsRaw, `Weighted changes totals (${tableRaw} -> ${wSnap.rows[0]}) and corner sums`);
+await act('colour', () => page.click('[aria-label="green player"]'));
+await act('road', async () => { await page.click('[data-mode=road]'); await page.dispatchEvent(`[data-edge*="${vs[30]}"]`, 'click'); });
+await act('port', async () => { await page.click('[data-mode=port]'); await page.dispatchEvent(`[data-vertex="${vs[5]}"]`, 'click'); });
+await act('roll', () => page.click('[data-roll="8"]'));
+await act('clear', () => page.click('[data-act=reset-rolls]'));
+await act('edit', () => page.click('[data-act=edit]'));
+await act('manual', () => page.click('[data-act=manual]'));
+await act('tile', async () => {
+  await page.click('[data-board] svg > g:nth-of-type(30) polygon');
+  await page.selectOption('select[aria-label=Resource]', 'ore');
+});
+// ◀ through every step, newest first; each must land exactly on the page before that action
+for (let i = states.length - 1; i >= 0; i--) {
+  await page.click('[data-act=undo-all]');
+  const now = await snap();
+  if (!now.locked && states[i].s.locked) await page.waitForSelector('[data-summary]');
+  const same = JSON.stringify(await snap()) === JSON.stringify(states[i].s);
+  check(same, `◀ undoes ${states[i].name}`);
+}
+check(await page.$eval('[data-act=undo-all]', b => b.disabled), '◀ greyed out again at the start');
 
 check(!errors.length, `no page errors ${errors.join(' | ')}`);
 await browser.close();

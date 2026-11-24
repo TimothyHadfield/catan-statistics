@@ -13,7 +13,9 @@
     <script src="https://unpkg.com/@babel/standalone@8.0.7/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <script src="js/engine.js?v=1"></script>
-    <script src="js/tracker-board.js?v=2"></script>
+    <script src="js/tracker-board.js?v=3"></script>
+    <script src="js/weights.js?v=1"></script>
+    <script src="js/undo.js?v=1"></script>
     <style>
         html, body { margin: 0; height: 100%; }
         body { overflow: hidden; -webkit-tap-highlight-color: transparent; }
@@ -46,8 +48,8 @@ const DiceBars = ({ rolls, total }) => {
     const top = Math.max(17, ...NUMS.map(pct));
     return (
         <div className="flex flex-col h-full min-h-0" data-chart>
-            <div className="flex items-center gap-2 text-[11px] text-gray-600 leading-none mb-1">
-                <span className="font-bold text-amber-900 text-xs" data-total>{total} rolls</span>
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-600 leading-none mb-1 whitespace-nowrap">
+                <span className="font-bold text-amber-900 text-xs whitespace-nowrap" data-total>{total} rolls</span>
                 <span className="ml-auto flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-sm" style={{background:'#ef4444'}}/>exp</span>
                 <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-sm" style={{background:'#3b82f6'}}/>actual</span>
             </div>
@@ -99,8 +101,7 @@ const [saved] = useState(() => window.TrackerBoard.load());
 const [stage, setStage] = useState(saved ? saved.stage : 'start');
 const [history, setHistory] = useState(saved ? saved.history : []);
 const [hexes, setHexes] = useState(saved ? saved.hexes : getDefaultHexes());
-const [vertices, setVertices] = useState({});
-const [edges, setEdges] = useState([]);
+const [weighted, setWeighted] = useState(saved ? saved.weighted : false);
 const [selectedHex, setSelectedHex] = useState(null);
 const [settlements, setSettlements] = useState(saved ? saved.settlements : []);
 const [roads, setRoads] = useState(saved ? saved.roads : []);
@@ -138,8 +139,7 @@ const portTypes = ['3:1', 'wood', 'brick', 'sheep', 'wheat', 'ore'];
 const rolls = useMemo(() => { const r = {}; NUMS.forEach(n => { r[n] = 0; }); history.forEach(n => { r[n]++; }); return r; }, [history]);
 const totalRolls = history.length;
 const recordRoll = (n) => setHistory(h => [...h, n]);
-const undoRoll = () => setHistory(h => h.slice(0, -1));
-const resetRolls = () => { if (!history.length || window.confirm('Clear all rolls?')) setHistory([]); };
+const resetRolls = () => setHistory([]);
 
 const potentialHexes = useMemo(() => {
 if (isLocked) return [];
@@ -202,8 +202,6 @@ setHexes(getDefaultHexes());
 setSelectedHex(null);
 setAutoPlaceMode(false);
 setAutoPlaceStep(0);
-setVertices({});
-setEdges([]);
 setSettlements([]);
 setRoads([]);
 setPorts([]);
@@ -230,19 +228,39 @@ hVerts.push(key);
 }
 for (let i = 0; i < 6; i++) eSet.add([hVerts[i], hVerts[(i+1)%6]].sort().join('|'));
 });
-setVertices(vMap);
-setEdges(Array.from(eSet).map(k => {const [v1,v2] = k.split('|'); return {v1,v2};}));
+return {vertices: vMap, edges: Array.from(eSet).map(k => {const [v1,v2] = k.split('|'); return {v1,v2};})};
 };
+
+// corners and edges exist only while the board is locked; worked out from the tiles
+const {vertices, edges} = useMemo(() => isLocked ? calculateVerticesAndEdges(hexes) : {vertices: {}, edges: []}, [hexes, isLocked]);
+
+// corners next to each corner (one road away), for the distance rule
+const neighbours = useMemo(() => {
+const n = {};
+edges.forEach(e => { (n[e.v1] = n[e.v1] || []).push(e.v2); (n[e.v2] = n[e.v2] || []).push(e.v1); });
+return n;
+}, [edges]);
+const blocked = useMemo(() => {
+const b = new Set();
+settlements.forEach(s => { b.add(s.vertex); (neighbours[s.vertex] || []).forEach(k => b.add(k)); });
+return b;
+}, [settlements, neighbours]);
+
+// Weighted: scarce resources count more per pip (js/weights.js)
+const W = window.TrackerWeights;
+const boardTotals = useMemo(() => W.totals(hexes), [hexes]);
+const wts = useMemo(() => weighted ? W.weights(boardTotals) : null, [boardTotals, weighted]);
+const wOf = r => (wts ? wts[r] : 1);
+const vertexValue = v => W.weightedSum(v.adjacentHexes, wts);
 
 const lockBoard = (hexesData) => {
 setSelectedHex(null); setAutoPlaceMode(false); setAutoPlaceStep(0);
-calculateVerticesAndEdges(hexesData);
 setPlacementMode('settlement');
 setStage('locked');
 };
 
 // Edit: back to Random / Manual (either one starts a new board); Back returns to this one
-const unlockBoard = () => { setVertices({}); setEdges([]); setResumable(true); setStage('start'); };
+const unlockBoard = () => { setResumable(true); setStage('start'); };
 const resumeBoard = () => { setResumable(false); lockBoard(hexes); };
 
 const randomBoard = () => {
@@ -255,19 +273,36 @@ lockBoard(b.hexes);
 
 const manualBoard = () => { resetBoard(); setResumable(false); setStage('manual'); };
 
-// restore: a locked game needs its corners and edges worked out again
-useEffect(() => { if (saved && saved.stage === 'locked') calculateVerticesAndEdges(saved.hexes); }, []);
+// everything the ◀ button can take back, and everything that is saved
+const snap = {stage, hexes, settlements, roads, ports, history, player: selectedPlayer, weighted, resumable};
+const snapKey = JSON.stringify(snap);
+const [past, setPast] = useState([]);
+const prevSnap = useRef(snap);
+const restoring = useRef(false);
 
-// save after every change
+// after every change: save it, and remember the state before it for ◀
 useEffect(() => {
-window.TrackerBoard.save({stage, hexes, settlements, roads, ports, history, player: selectedPlayer});
-}, [stage, hexes, settlements, roads, ports, history, selectedPlayer]);
+window.TrackerBoard.save(snap);
+if (restoring.current) restoring.current = false;
+else { const before = prevSnap.current; setPast(p => window.TrackerUndo.record(p, before, snap)); }
+prevSnap.current = snap;
+}, [snapKey]);
+
+const goBack = () => {
+const r = window.TrackerUndo.back(past);
+if (!r.state) return;
+const s = r.state;
+restoring.current = !window.TrackerUndo.same(s, snap);
+setPast(r.stack);
+setStage(s.stage); setHexes(s.hexes); setSettlements(s.settlements); setRoads(s.roads); setPorts(s.ports);
+setHistory(s.history); setSelectedPlayer(s.player); setWeighted(s.weighted); setResumable(s.resumable);
+if (s.stage !== 'manual') { setAutoPlaceMode(false); setAutoPlaceStep(0); }
+setSelectedHex(null);
+};
 
 const getResourceTotals = () => {
-const t = {wood:0,brick:0,sheep:0,wheat:0,ore:0};
-hexes.forEach(h => {
-if (h.resource && h.resource !== 'desert' && h.number) t[h.resource] += getNumberProbability(parseInt(h.number));
-});
+const t = {};
+RES_LIST.forEach(r => { t[r] = boardTotals[r] * wOf(r); });
 return t;
 };
 
@@ -296,9 +331,9 @@ Object.keys(playerColors).forEach(p => { stats[p] = {totalPoints: 0, count: 0, r
 settlements.forEach(s => {
 const v = vertices[s.vertex];
 if (v) {
-stats[s.player].totalPoints += v.points;
+stats[s.player].totalPoints += vertexValue(v);
 stats[s.player].count++;
-v.adjacentHexes.forEach(h => { stats[s.player].resources[h.resource] += h.pips; });
+v.adjacentHexes.forEach(h => { stats[s.player].resources[h.resource] += h.pips * wOf(h.resource); });
 }
 });
 return stats;
@@ -349,6 +384,13 @@ return (
 };
 
 const btn = 'rounded-lg font-semibold shadow-sm';
+
+// ◀ takes back the last change of any kind (one history of whole-page snapshots)
+const backBtn = (
+<button onClick={goBack} disabled={!past.length} aria-label="Back" title="Back" className="w-7 h-7 lg:w-9 lg:h-9 shrink-0 rounded-lg bg-white border border-amber-700 text-amber-800 flex items-center justify-center shadow-sm disabled:opacity-35" data-act="undo-all">
+<svg viewBox="0 0 20 20" className="w-3.5 h-3.5 lg:w-4 lg:h-4" aria-hidden="true"><path d="M14 3L5 10l9 7z" fill="currentColor"/></svg>
+</button>
+);
 const stats = isLocked ? getPlayerStats() : null;
 const placed = stats ? Object.entries(stats).filter(([, s]) => s.count > 0) : [];
 const totals = getResourceTotals();
@@ -393,8 +435,17 @@ const tag = port && (port.type === '3:1' ? '3:1' : '2:1');
 return (
 <g key={k} data-vertex={k} style={{cursor: live ? 'pointer' : 'default', pointerEvents: live ? 'auto' : 'none'}} onClick={() => { if (placementMode === 'settlement') handleVertexClick(k); if (placementMode === 'port') handlePortClick(k); }}>
 <circle cx={v.x} cy={v.y} r="15" fill="transparent"/>
-<circle cx={v.x} cy={v.y} r={sett ? 12 : 8} fill={sett ? playerColors[sett.player] : getVertexColor(v.points)} opacity="0.9" stroke={sett ? '#000' : (port ? '#FFD700' : '#000')} strokeWidth={port ? 3 : 1}/>
-{!sett && <text x={v.x} y={v.y} textAnchor="middle" dy="4" fontSize="11" fontWeight="bold" fill="#FFF" style={{pointerEvents: 'none'}}>{v.points}</text>}
+{sett ? (
+<circle cx={v.x} cy={v.y} r="12" fill={playerColors[sett.player]} opacity="0.9" stroke="#000" strokeWidth={port ? 3 : 1}/>
+) : blocked.has(k) ? (
+<circle cx={v.x} cy={v.y} r={port ? 4.5 : 3.5} fill="#9ca3af" stroke={port ? '#FFD700' : 'none'} strokeWidth={port ? 2 : 0} data-blocked=""/>
+) : (() => {
+const val = vertexValue(v), txt = W.fmt(val), dec = txt.includes('.');
+return (<>
+<circle cx={v.x} cy={v.y} r={dec ? 10 : 8} fill={getVertexColor(val)} opacity="0.9" stroke={port ? '#FFD700' : '#000'} strokeWidth={port ? 3 : 1}/>
+<text x={v.x} y={v.y} textAnchor="middle" dy={dec ? 3 : 4} fontSize={dec ? 8 : 11} fontWeight="bold" fill="#FFF" style={{pointerEvents: 'none'}} data-sum="">{txt}</text>
+</>);
+})()}
 {port && (
 <g style={{pointerEvents: 'none'}}>
 <rect x={tx - 11} y={ty - 7} width="22" height="14" rx="4" fill={port.type === '3:1' ? '#FFFFFF' : resourceColors[port.type]} stroke="#7c2d12" strokeWidth="1"/>
@@ -414,16 +465,20 @@ return (
 {resumable && <button onClick={resumeBoard} className={`${btn} px-4 py-1.5 bg-white/90 text-amber-800 border border-amber-300`} data-act="back">Back</button>}
 </div>
 )}
+{stage === 'start' && <div className="absolute top-1 left-1">{backBtn}</div>}
 {isLocked && (
 <button onClick={unlockBoard} className="absolute top-1 right-1 px-2.5 py-1 text-sm rounded-md bg-white/90 text-amber-800 border border-amber-300 font-semibold" data-act="edit">Edit</button>
 )}
 </div>
 );
 
+
 const playerBar = isLocked && (
-<div className="flex items-center gap-1 lg:gap-2 flex-wrap pl-1" data-players>
+<div className="flex items-center gap-1 lg:gap-2 flex-wrap" data-players>
+{backBtn}
+<span className="w-0.5 lg:w-1"/>
 {Object.entries(playerColors).map(([c, hex]) => (
-<button key={c} aria-label={`${c} player`} onClick={() => setSelectedPlayer(c)} className={`w-6 h-6 lg:w-8 lg:h-8 rounded-full shrink-0 ${selectedPlayer === c ? 'ring-[3px] ring-black' : 'ring-1 ring-gray-400'}`} style={{backgroundColor: hex}}/>
+<button key={c} aria-label={`${c} player`} onClick={() => setSelectedPlayer(c)} className={`w-[22px] h-[22px] lg:w-8 lg:h-8 rounded-full shrink-0 ${selectedPlayer === c ? 'ring-[3px] ring-black' : 'ring-1 ring-gray-400'}`} style={{backgroundColor: hex}}/>
 ))}
 <div className="ml-auto flex rounded-lg overflow-hidden border border-amber-700 text-[13px] lg:text-base">
 {[['settlement', 'Settlement'], ['road', 'Road'], ['port', 'Port']].map(([m, label]) => (
@@ -435,10 +490,11 @@ const playerBar = isLocked && (
 
 const builderBar = stage === 'manual' && (
 <div className="flex gap-1 lg:gap-1.5 flex-wrap items-center text-xs lg:text-sm">
-<button onClick={startAutoPlace} className={`${btn} px-2 lg:px-3 py-1.5 bg-green-600 text-white`} disabled={autoPlaceMode}>Auto Place</button>
-<button onClick={randomBoard} className={`${btn} px-2 lg:px-3 py-1.5 bg-white text-amber-800 border border-amber-700`}>Random</button>
-<button onClick={resetBoard} className={`${btn} px-2 lg:px-3 py-1.5 bg-gray-500 text-white`}>Reset Board</button>
-<button onClick={() => lockBoard(hexes)} className={`${btn} px-2 lg:px-4 py-1.5 bg-green-700 text-white ml-auto`} data-act="lock">Lock & Calculate</button>
+{backBtn}
+<button onClick={startAutoPlace} className={`${btn} px-1.5 lg:px-3 py-1.5 bg-green-600 text-white`} disabled={autoPlaceMode}>Auto Place</button>
+<button onClick={randomBoard} className={`${btn} px-1.5 lg:px-3 py-1.5 bg-white text-amber-800 border border-amber-700`}>Random</button>
+<button onClick={resetBoard} className={`${btn} px-1.5 lg:px-3 py-1.5 bg-gray-500 text-white`}>Reset Board</button>
+<button onClick={() => lockBoard(hexes)} className={`${btn} px-1.5 lg:px-4 py-1.5 bg-green-700 text-white ml-auto`} data-act="lock">Lock & Calculate</button>
 </div>
 );
 
@@ -482,9 +538,16 @@ autoPlaceMode ? (
 );
 
 // resource pips: whole table, then each player with a settlement
-const cell = 'w-6 lg:w-11 text-center tabular-nums';
+const cell = `${weighted ? 'w-[27px] lg:w-12' : 'w-6 lg:w-11'} text-center tabular-nums`;
+const f = W.fmt;
 const summary = isLocked && (
-<div className="text-sm lg:text-lg leading-tight" data-summary>
+<div className={`${weighted ? 'text-[13px]' : 'text-sm'} lg:text-lg leading-tight`} data-summary>
+<label className="flex items-center gap-1.5 text-xs lg:text-sm font-semibold text-amber-900 cursor-pointer select-none pb-1">
+<span>Weighted</span>
+<button role="switch" aria-checked={weighted} onClick={() => setWeighted(!weighted)} className={`relative w-8 h-[18px] lg:w-10 lg:h-6 rounded-full transition-colors ${weighted ? 'bg-amber-700' : 'bg-gray-300'}`} data-act="weighted">
+<span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] lg:w-5 lg:h-5 rounded-full bg-white shadow transition-transform ${weighted ? 'translate-x-[14px] lg:translate-x-4' : ''}`}/>
+</button>
+</label>
 <div className="flex items-center gap-0.5 pb-0.5">
 <span className="w-9 lg:w-16"/>
 {RES_LIST.map(r => <span key={r} className={`${cell} flex justify-center`} title={r}><ResIcon r={r} className="w-[17px] h-[17px] lg:w-6 lg:h-6"/></span>)}
@@ -492,21 +555,21 @@ const summary = isLocked && (
 </div>
 <div className="flex items-center gap-0.5 py-0.5 border-t border-amber-200 font-bold text-amber-900" data-row="table">
 <span className="w-9 lg:w-16 text-xs lg:text-base">Table</span>
-{RES_LIST.map(r => <span key={r} className={cell}>{totals[r]}</span>)}
-<span className={cell}>{RES_LIST.reduce((a, r) => a + totals[r], 0)}</span>
+{RES_LIST.map(r => <span key={r} className={cell}>{f(totals[r])}</span>)}
+<span className={cell}>{f(RES_LIST.reduce((a, r) => a + totals[r], 0))}</span>
 </div>
 {placed.map(([p, s]) => (
 <div key={p} className="flex items-center gap-0.5 py-0.5 border-t border-amber-100" data-row={p}>
 <span className="w-9 lg:w-16 flex items-center gap-1"><i className="inline-block w-3.5 h-3.5 lg:w-5 lg:h-5 rounded-full" style={{background: playerColors[p], border: '1px solid #444'}}/><span className="text-[11px] lg:text-sm text-gray-500">{s.count}</span></span>
-{RES_LIST.map(r => <span key={r} className={`${cell} ${s.resources[r] ? '' : 'text-gray-300'}`}>{s.resources[r]}</span>)}
-<span className={`${cell} font-bold`}>{s.totalPoints}</span>
+{RES_LIST.map(r => <span key={r} className={`${cell} ${s.resources[r] ? '' : 'text-gray-300'}`}>{f(s.resources[r])}</span>)}
+<span className={`${cell} font-bold`}>{f(s.totalPoints)}</span>
 </div>
 ))}
 {!placed.length && <p className="text-xs text-gray-500 pt-1">Tap corners to place</p>}
 </div>
 );
 
-// tap pad: 2-7 on top, 8-12 + undo below; the small number is how often it came up
+// tap pad: 2-7 on top, 8-12 + Clear rolls below (◀ undoes a wrong tap); the small number is how often it came up
 const dicePad = (
 <div className="pad grid grid-cols-6 gap-1.5" data-pad>
 {NUMS.map(n => (
@@ -515,8 +578,8 @@ const dicePad = (
 <span className="text-[10px] lg:text-xs opacity-80 mt-0.5">{rolls[n]}</span>
 </button>
 ))}
-<button onClick={undoRoll} disabled={!totalRolls} className="h-11 lg:h-16 rounded-lg bg-white border-2 border-amber-700 text-amber-800 font-semibold text-sm lg:text-lg disabled:opacity-40 active:scale-95 transition-transform flex flex-col items-center justify-center leading-none" data-act="undo">
-<span>Undo</span>{totalRolls > 0 && <span className="text-[10px] opacity-70 mt-0.5">{history[history.length - 1]}</span>}
+<button onClick={resetRolls} disabled={!totalRolls} className="h-11 lg:h-16 rounded-lg bg-white border-2 border-red-700 text-red-700 font-semibold text-xs lg:text-base disabled:opacity-40 active:scale-95 transition-transform flex flex-col items-center justify-center leading-tight" data-act="reset-rolls">
+<span>Clear</span><span>rolls</span>
 </button>
 </div>
 );
@@ -527,7 +590,6 @@ const chartBox = (
 </div>
 );
 
-const resetLink = <button onClick={resetRolls} className="text-xs text-red-700 font-semibold px-1" data-act="reset-rolls">Clear rolls</button>;
 
 return (
 <div className="h-[100dvh] bg-gradient-to-br from-amber-50 to-orange-100 p-2 lg:p-4 flex flex-col lg:flex-row gap-2 lg:gap-4 overflow-hidden">
@@ -549,7 +611,6 @@ return (
 </div>
 </div>
 ) : chartBox}
-<div className="flex justify-end -mb-1">{resetLink}</div>
 {dicePad}
 </div>
 </div>
