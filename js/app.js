@@ -206,6 +206,12 @@ function drawLive(c) {
   });
   // what I may tap now
   const hl = targets(c);
+  // Odds on: when not placing a town, every open corner still shows its number (look-only, taps pass through)
+  if (S.spotOdds && hl.kind !== 'settle') g.vOwner.forEach((o, v) => {
+    if (!openCorner(g, v)) return;
+    const [x, y] = pt(v), odds = spotPips(g, v), txt = String(odds);
+    h += `<g class="odds-p"><circle cx="${x}" cy="${y}" r="${0.26 * U}" class="hl-c" style="stroke:rgba(0,0,0,.45);stroke-width:1.5;fill:hsl(${Math.round(Math.max(0, Math.min(1, (odds - 3) / 9)) * 120)},70%,80%)"/><text x="${x}" y="${y + (txt.length > 2 ? 0.1 : 0.12) * U}" class="hl-t${txt.length > 2 ? ' long' : ''}">${txt}</text></g>`;
+  });
   hl.hexes.forEach(i => { const P = hexPts(i).map(q => q.join(',')).join(' '); h += `<polygon points="${P}" class="hl-hex" data-h="${i}"/>`; });
   hl.edges.forEach(e => {
     const [a, b] = G.E[e].v, [ax, ay] = pt(a), [bx, by] = pt(b);
@@ -581,7 +587,7 @@ function panelHTML(c) {
     return `<div class="phase"><div class="row">${diceHTML(g)}<div class="grow"><div class="h hs">${t}</div>${status}</div></div>${o ? `<div class="offer small">${offerText(g, o, seat)}</div>` : ''}</div>`;
   }
   switch (g.phase) {
-    case 'setup': return `<div class="phase">${head(g.sub === 'settle' ? 'Place a town' : 'Place a road', g.sub === 'settle' ? `<span class="levers">${levers()}</span>` : '')}<div class="small muted">${g.sub === 'settle' ? (g.step >= g.n ? 'Your second town pays its tiles now.' : S.spotOdds ? 'Numbers show each corner\'s dots.' : 'Tap a glowing corner.') : 'Next to the town you just placed.'}${g.sub === 'settle' ? why('odds') : ''}</div></div>`;
+    case 'setup': return `<div class="phase">${head(g.sub === 'settle' ? 'Place a town' : 'Place a road', `<span class="levers">${levers()}</span>`)}<div class="small muted">${g.sub === 'settle' ? (g.step >= g.n ? 'Your second town pays its tiles now.' : S.spotOdds ? 'Numbers show each corner\'s dots.' : 'Tap a glowing corner.') : 'Next to the town you just placed.'}${g.sub === 'settle' ? why('odds') : ''}</div></div>`;
     case 'roll': {
       const kn = E.playable(g, seat, 'K') > 0 && !g.devUsed;
       return `<div class="phase"><div class="row">${diceHTML(g)}<button class="btn warm grow big-btn" id="rollBtn">Roll</button>${kn ? '<button class="btn" data-dev="K">Knight first</button>' : ''}</div>${status}</div>`;
@@ -615,7 +621,7 @@ function panelHTML(c) {
       const canC = E.canPay(res, COST.city) && E.citiesLeft(g, seat) && g.vOwner.some((o, v) => o === seat && g.vLevel[v] === 1);
       const canD = E.canPay(res, COST.dev) && g.deck > 0;
       // placing a town: the two switches take the hint's place (the corners glow; Town again or Back cancels)
-      const hint = app.mode === 'settle' ? `<div class="last small levers-line"><span class="levers">${levers()}</span><button class="link" id="cancelMode">cancel</button></div>`
+      const hint = app.mode === 'settle' || app.mode === 'road' ?`<div class="last small levers-line"><span class="levers">${levers()}</span><button class="link" id="cancelMode">cancel</button></div>`
         : app.mode ? `<div class="last small">Tap a ${app.mode === 'road' ? 'glowing edge' : app.mode === 'city' ? 'ringed town' : 'glowing corner'} · <button class="link" id="cancelMode">cancel</button></div>`
         : extra ? `<div class="last small"><b>Extra build</b> ${why('extra')}</div>` : `<div class="last small muted">${esc(lastLine(c))}</div>`;
       // extra build step (5-6 players): no trading or cards, so the Trade slot stays empty
@@ -765,7 +771,7 @@ function chartHTML(g) {
   return `<div class="chart">${bars}</div><div class="small muted"><i class="key a"></i> rolled % <i class="key t"></i> expected (n/36, as in In-person play) · ${g.rolls.reduce((a, b) => a + b, 0)} rolls</div>`;
 }
 // phone: the dice box, with everyone's cards under it; kept current by render() while open
-const diceLiveHTML = c => `${chartHTML(c.g)}<div class="sep"></div>${handsHTML(c)}`;
+const diceLiveHTML = c => `${chartHTML(c.g)}<div class="sep"></div>${dotsHTML(c)}<div class="sep"></div>${handsHTML(c)}`;
 function diceSheet(c) {
   openSheet(`<div class="sheet-h"><span class="h">Dice this game</span><button class="btn sm ghost" data-close>Close</button></div><div id="diceLive">${diceLiveHTML(c)}</div>`);
 }
@@ -791,11 +797,38 @@ function handsHTML(c) {
     return `<li><i class="pc" style="background:${colorOf(i)}"></i><span class="hn">${esc(P.name)}</span>${cells}</li>`;
   }).join('')}</ul>`;
 }
+// dots (probability points) per resource: the board's totals, then each player's from their towns
+// (a city counts twice); the robber's tile counts 0. Weighted on: player dots × weight, Table row shows weights.
+function dotsHTML(c, cards) {
+  const { g, seat } = c;
+  const tot = [0, 0, 0, 0, 0];
+  g.hexRes.forEach((r, h) => { if (r >= 0) tot[r] += E.pips(g.hexNum[h]); });
+  const w = S.weighted ? W.weights(W.totals(g.hexRes.map((r, h) => ({ resource: W.RES[r], number: g.hexNum[h] })))) : null;
+  const pl = g.players.map(() => [0, 0, 0, 0, 0]);
+  g.vOwner.forEach((o, v) => {
+    if (o < 0) return;
+    G.V[v].hexes.forEach(h => { if (h !== g.robber && g.hexRes[h] >= 0) pl[o][g.hexRes[h]] += E.pips(g.hexNum[h]) * (g.vLevel[v] === 2 ? 2 : 1); });
+  });
+  // same look as In-person play's table: Weighted switch, icon header, bold Table row, then a row per
+  // player (colour dot + towns) with grey zeros and a bold "all"; online adds a cards-held column
+  const val = (n, r) => (w ? n * w[W.RES[r]] : n);
+  const cell = (x, cls = '') => `<span class="dc${x ? '' : ' zero'}${cls}">${W.fmt(x)}</span>`;
+  const towns = g.players.map(() => 0); g.vOwner.forEach(o => { if (o >= 0) towns[o]++; });
+  const held = i => { const r = g.players[i].res; return Array.isArray(r) ? r.reduce((a, b) => a + b, 0) : r; };
+  const head = `<div class="dr dh"><span></span>${[0, 1, 2, 3, 4].map(r => `<span class="dc" title="${RES_NAME[r]}">${resIcon(r)}</span>`).join('')}<span class="dc lab">all</span>${cards ? '<span class="dc lab" title="cards in hand"><i class="ic-card"></i></span>' : ''}</div>`;
+  const table = `<div class="dr dt"><span class="dn">Table</span>${tot.map((n, r) => (w ? `<span class="dc">×${W.fmt(w[W.RES[r]])}</span>` : cell(n))).join('')}${cell(tot.reduce((a, b) => a + b, 0))}${cards ? '<span></span>' : ''}</div>`;
+  const order = [seat, ...g.players.map((_, i) => i).filter(i => i !== seat)];
+  const rows = order.map(i => {
+    const vs = pl[i].map(val);
+    return `<div class="dr"><span class="dn" title="${esc(g.players[i].name)}"><i class="pc" style="background:${colorOf(i)}"></i><small>${towns[i]}</small></span>${vs.map(x => cell(x)).join('')}${cell(vs.reduce((a, b) => a + b, 0), ' all')}${cards ? `<span class="dc cards" aria-label="cards in hand">${held(i)}</span>` : ''}</div>`;
+  }).join('');
+  return `<div class="dots${cards ? ' wc' : ''}${w ? ' wt' : ''}"><div class="dw">${lever('weighted', 'Weighted')}</div>${head}${table}${rows}</div>`;
+}
 function sideHTML(c) {
   const { g } = c;
-  return `<div class="phase side-only"><div class="cap">Table</div><ul class="feed">${feedLines(c, g.n >= 5 ? 11 - g.n : 12 - g.n)}</ul></div>
+  return `<div class="phase side-only"><div class="cap">Table</div><ul class="feed">${feedLines(c, g.n >= 5 ? 8 - g.n : 10 - g.n)}</ul></div>
     <div class="phase side-only"><div class="cap">Dice this game</div>${chartHTML(g)}</div>
-    <div class="phase side-only" id="handsBox">${handsHTML(c)}</div>`;
+    <div class="phase side-only" id="dotsBox">${dotsHTML(c, true)}</div>`;
 }
 
 // ------------------------------------------------------------ settings

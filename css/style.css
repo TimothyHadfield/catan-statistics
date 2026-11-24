@@ -99,6 +99,7 @@ body.at-table.game-over .board-wrap { max-height: calc(100dvh - var(--head) - va
 #board .hl-c { fill: rgba(255,255,255,.92); stroke-width: 3; }
 #board .hl-t { font: 800 13.5px system-ui, sans-serif; fill: #1b1410; text-anchor: middle; pointer-events: none; }
 #board .hl-t.long { font-size: 10px; letter-spacing: -.3px; }
+#board .odds-p { pointer-events: none; opacity: .92; }
 #board .hl-city { fill: none; stroke: #fff; stroke-width: 3; stroke-dasharray: 4 3; animation: march .7s linear infinite; }
 #board .hit { fill: transparent; cursor: pointer; }
 #board .hl-v:hover .hl-c { fill: #fff6c8; }
@@ -259,6 +260,25 @@ button.rc { font: inherit; padding: 0; cursor: pointer; }
 .hands .hc { display: inline-flex; align-items: center; gap: 3px; min-width: 32px; font-variant-numeric: tabular-nums; }
 .hands .hc .ri { width: 16px; height: 16px; }
 .hands .hc.zero { opacity: .4; }
+/* dots table: same layout as In-person play's (Weighted switch, icons, bold Table row, player rows) */
+.dots { font-size: 15px; font-variant-numeric: tabular-nums; }
+.dots .dw { display: flex; padding-bottom: 4px; }
+.dots .dw .odds-lever { color: var(--accent-warm); font-size: 13px; }
+.dots .dr { display: grid; grid-template-columns: 42px repeat(6, 1fr); align-items: center; gap: 2px; padding: 3px 0; border-top: 1px solid rgba(42,48,66,.6); }
+.dots.wc .dr { grid-template-columns: 42px repeat(6, 1fr) 30px; }
+.dots .dr.dh { border-top: 0; padding: 0 0 2px; }
+.dots .dc { text-align: center; display: flex; justify-content: center; align-items: center; }
+.dots .dc .ri { width: 20px; height: 20px; }
+.dots .dc.lab { color: var(--muted); font-size: 12px; }
+.dots .dc.zero { opacity: .3; }
+.dots .dc.all { font-weight: 700; }
+.dots .dc.cards { color: var(--muted); font-size: 13px; }
+.dots .dr.dt { font-weight: 700; color: var(--accent-warm); border-top-color: var(--accent-warm); }
+.dots .dn { display: flex; align-items: center; gap: 5px; font-size: 13px; }
+.dots .dn .pc { width: 14px; height: 14px; border: 1px solid #444; }
+.dots .dn small { color: var(--muted); font-size: 11px; }
+.dots.wt { font-size: 14px; }
+@media (min-width: 900px) { .dots { font-size: 16px; } .dots .dr { padding: 2px 0; } .dots .dw { padding-bottom: 2px; } .dots.wt { font-size: 15px; } .dots .dc .ri { width: 22px; height: 22px; } .dots .dn .pc { width: 16px; height: 16px; } }
 .hands .hc .ic-card { margin: 0 3px 0 4px; }
 /* spot odds lever on the play screen while placing a town */
 .levers { display: inline-flex; align-items: center; gap: 10px; flex: none; }
