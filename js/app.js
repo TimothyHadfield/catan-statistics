@@ -226,7 +226,7 @@ function drawLive(c) {
 // (maths shared with In-person play in js/weights.js; engine resources are 0..4 in the same order as W.RES)
 const boardWeights = g => W.weights(W.totals(g.hexRes.map((r, h) => ({ resource: W.RES[r], number: g.hexNum[h] }))));
 const spotPips = (g, v) => (S.weighted
-  ? Math.round(W.weightedSum(G.V[v].hexes.filter(h => h !== g.robber && g.hexRes[h] >= 0).map(h => ({ resource: W.RES[g.hexRes[h]], pips: E.pips(g.hexNum[h]) })), boardWeights(g)) * 10) / 10
+  ? Math.round(W.weightedSum(G.V[v].hexes.filter(h => h !== g.robber && g.hexRes[h] >= 0).map(h => ({ resource: W.RES[g.hexRes[h]], pips: E.pips(g.hexNum[h]) })), boardWeights(g)))
   : G.V[v].hexes.reduce((a, h) => a + (h === g.robber ? 0 : E.pips(g.hexNum[h])), 0));
 const openCorner = (g, v) => g.vOwner[v] < 0 && G.V[v].edges.every(e => G.E[e].v.every(u => g.vOwner[u] < 0));
 
