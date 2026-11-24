@@ -48,6 +48,44 @@
     throw new Error('no legal board');
   }
 
-  const api = { randomBoard, cornerKey, legal };
+  // ------------------------------------------------------------ save / restore (localStorage)
+  // Everything is wrapped: private mode, blocked storage or bad JSON just means "nothing saved".
+  const SAVE_KEY = 'catan.tracker';
+  const STAGES = ['start', 'manual', 'locked'];
+  const ROLLS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const isStr = s => typeof s === 'string';
+  const okHex = h => h && Number.isFinite(h.id) && Number.isFinite(h.x) && Number.isFinite(h.y) && isStr(h.resource) && isStr(h.number);
+
+  function getStore() { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } }
+
+  function save(data, store) {
+    try {
+      const s = store || getStore(); if (!s) return false;
+      s.setItem(SAVE_KEY, JSON.stringify({ v: 1, stage: data.stage, hexes: data.hexes, settlements: data.settlements,
+        roads: data.roads, ports: data.ports, history: data.history, player: data.player }));
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function load(store) {
+    try {
+      const s = store || getStore(); if (!s) return null;
+      const raw = s.getItem(SAVE_KEY); if (!raw) return null;
+      const d = JSON.parse(raw);
+      if (!d || d.v !== 1 || !STAGES.includes(d.stage) || !Array.isArray(d.hexes) || !d.hexes.every(okHex)) return null;
+      const arr = (a, ok) => (Array.isArray(a) ? a.filter(ok) : []);
+      return {
+        stage: d.stage === 'locked' && !d.hexes.length ? 'start' : d.stage,
+        hexes: d.hexes,
+        settlements: arr(d.settlements, x => x && isStr(x.vertex) && isStr(x.player)),
+        roads: arr(d.roads, x => x && isStr(x.edge) && isStr(x.player)),
+        ports: arr(d.ports, x => x && isStr(x.vertex) && isStr(x.type)),
+        history: arr(d.history, n => ROLLS.includes(n)),
+        player: isStr(d.player) ? d.player : 'red',
+      };
+    } catch (e) { return null; }
+  }
+
+  const api = { randomBoard, cornerKey, legal, save, load, SAVE_KEY };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TrackerBoard = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -37,6 +37,42 @@ test('2000 random boards are legal standard boards', () => {
   assert.ok(seen.size > 1900, 'boards vary');
 });
 
+// a fake localStorage that survives a "reload" (a new load() call), like the browser's
+function fakeStore() { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), m }; }
+
+test('save, reload, restore: board, pieces, harbours, rolls and locked state come back', () => {
+  const store = fakeStore();
+  const { hexes, ports } = TB.randomBoard(99);
+  const k0 = TB.cornerKey(hexes[9], 0), k1 = TB.cornerKey(hexes[9], 1);
+  const game = { stage: 'locked', hexes, ports,
+    settlements: [{ vertex: k0, player: 'red' }, { vertex: TB.cornerKey(hexes[2], 3), player: 'blue' }],
+    roads: [{ edge: [k0, k1].sort().join('|'), player: 'red' }],
+    history: [6, 8, 7, 5, 9, 7, 4, 10, 6, 3, 11, 7, 8, 2, 12, 9, 6, 5], player: 'blue' };
+  assert.strictEqual(TB.save(game, store), true);
+  const back = JSON.parse(JSON.stringify(TB.load(store))); // what a fresh page would read
+  assert.deepStrictEqual(back, JSON.parse(JSON.stringify(game)));
+  // saving again after a change overwrites (one key, latest state wins)
+  TB.save({ ...game, history: game.history.slice(0, -1), stage: 'start' }, store);
+  assert.strictEqual(store.m.size, 1);
+  assert.strictEqual(TB.load(store).history.length, 17);
+  assert.strictEqual(TB.load(store).stage, 'start');
+});
+
+test('restore never throws: nothing saved, bad JSON, wrong shape, blocked storage', () => {
+  assert.strictEqual(TB.load(fakeStore()), null);
+  const bad = fakeStore(); bad.setItem(TB.SAVE_KEY, '{not json'); assert.strictEqual(TB.load(bad), null);
+  const wrong = fakeStore(); wrong.setItem(TB.SAVE_KEY, JSON.stringify({ v: 1, stage: 'locked', hexes: [{ id: 'x' }] })); assert.strictEqual(TB.load(wrong), null);
+  const junk = fakeStore();
+  junk.setItem(TB.SAVE_KEY, JSON.stringify({ v: 1, stage: 'manual', hexes: TB.randomBoard(3).hexes, history: [6, 7, 13, 'x', 1], settlements: 'no', roads: [null], ports: [{ vertex: 1 }] }));
+  const j = TB.load(junk);
+  assert.deepStrictEqual([j.history, j.settlements, j.roads, j.ports, j.player], [[6, 7], [], [], [], 'red']);
+  const blocked = { getItem() { throw new Error('SecurityError'); }, setItem() { throw new Error('QuotaExceeded'); } };
+  assert.strictEqual(TB.load(blocked), null);
+  assert.strictEqual(TB.save({ stage: 'start', hexes: [] }, blocked), false);
+  // no store at all (node has no localStorage by default)
+  assert.doesNotThrow(() => TB.load());
+});
+
 test('board shape matches the tracker default 3-4-5-4-3 layout', () => {
   const { hexes } = TB.randomBoard(7);
   const rows = count(hexes.map(h => Math.round(h.y)));

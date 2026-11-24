@@ -13,7 +13,7 @@
     <script src="https://unpkg.com/@babel/standalone@8.0.7/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <script src="js/engine.js?v=1"></script>
-    <script src="js/tracker-board.js?v=1"></script>
+    <script src="js/tracker-board.js?v=2"></script>
     <style>
         html, body { margin: 0; height: 100%; }
         body { overflow: hidden; -webkit-tap-highlight-color: transparent; }
@@ -94,16 +94,19 @@ const getDefaultHexes = () => [
 ];
 
 // stage: 'start' (Random / Manual), 'manual' (builder), 'locked' (playing)
-const [stage, setStage] = useState('start');
-const [history, setHistory] = useState([]);
-const [hexes, setHexes] = useState(getDefaultHexes());
+// the last game comes back after a reload (localStorage, see js/tracker-board.js save/load)
+const [saved] = useState(() => window.TrackerBoard.load());
+const [stage, setStage] = useState(saved ? saved.stage : 'start');
+const [history, setHistory] = useState(saved ? saved.history : []);
+const [hexes, setHexes] = useState(saved ? saved.hexes : getDefaultHexes());
 const [vertices, setVertices] = useState({});
 const [edges, setEdges] = useState([]);
 const [selectedHex, setSelectedHex] = useState(null);
-const [settlements, setSettlements] = useState([]);
-const [roads, setRoads] = useState([]);
-const [ports, setPorts] = useState([]);
-const [selectedPlayer, setSelectedPlayer] = useState('red');
+const [settlements, setSettlements] = useState(saved ? saved.settlements : []);
+const [roads, setRoads] = useState(saved ? saved.roads : []);
+const [ports, setPorts] = useState(saved ? saved.ports : []);
+const [selectedPlayer, setSelectedPlayer] = useState(saved ? saved.player : 'red');
+const [resumable, setResumable] = useState(false);
 const [placementMode, setPlacementMode] = useState('settlement');
 const [autoPlaceMode, setAutoPlaceMode] = useState(false);
 const [autoPlaceStep, setAutoPlaceStep] = useState(0);
@@ -238,14 +241,27 @@ setPlacementMode('settlement');
 setStage('locked');
 };
 
-const unlockBoard = () => { setVertices({}); setEdges([]); setStage('manual'); };
+// Edit: back to Random / Manual (either one starts a new board); Back returns to this one
+const unlockBoard = () => { setVertices({}); setEdges([]); setResumable(true); setStage('start'); };
+const resumeBoard = () => { setResumable(false); lockBoard(hexes); };
 
 const randomBoard = () => {
 const seed = (crypto.getRandomValues(new Uint32Array(1))[0]) || 1;
 const b = window.TrackerBoard.randomBoard(seed);
 setHexes(b.hexes); setPorts(b.ports); setSettlements([]); setRoads([]);
+setResumable(false);
 lockBoard(b.hexes);
 };
+
+const manualBoard = () => { resetBoard(); setResumable(false); setStage('manual'); };
+
+// restore: a locked game needs its corners and edges worked out again
+useEffect(() => { if (saved && saved.stage === 'locked') calculateVerticesAndEdges(saved.hexes); }, []);
+
+// save after every change
+useEffect(() => {
+window.TrackerBoard.save({stage, hexes, settlements, roads, ports, history, player: selectedPlayer});
+}, [stage, hexes, settlements, roads, ports, history, selectedPlayer]);
 
 const getResourceTotals = () => {
 const t = {wood:0,brick:0,sheep:0,wheat:0,ore:0};
@@ -390,9 +406,12 @@ return (
 })}
 </svg>
 {stage === 'start' && (
-<div className="absolute inset-0 flex items-center justify-center gap-3 p-4">
+<div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4">
+<div className="flex gap-3">
 <button onClick={randomBoard} className={`${btn} px-6 py-4 text-xl bg-gradient-to-br from-amber-600 to-amber-800 text-white`} data-act="random">Random</button>
-<button onClick={() => setStage('manual')} className={`${btn} px-6 py-4 text-xl bg-white text-amber-800 border-2 border-amber-700`} data-act="manual">Manual</button>
+<button onClick={manualBoard} className={`${btn} px-6 py-4 text-xl bg-white text-amber-800 border-2 border-amber-700`} data-act="manual">Manual</button>
+</div>
+{resumable && <button onClick={resumeBoard} className={`${btn} px-4 py-1.5 bg-white/90 text-amber-800 border border-amber-300`} data-act="back">Back</button>}
 </div>
 )}
 {isLocked && (
