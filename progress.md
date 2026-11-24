@@ -1,7 +1,7 @@
 # Catan: progress
 
 ## START HERE
-Last updated 2026-10-28. Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
+Last updated 2026-11-24 (42 tests pass). Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
 
 ## Goal right now
 Catan is a playable base game vs computer, 3–6 players, with online rooms (friend codes, ON since 2026-10-27, Tim's go: "enable it to all games for now and we can disable it later if it becomes too much"). Wave 3 (2026-10-28, Tim: "Just make the games better") added 5–6 players, house-rule options and Learn videos.
@@ -17,7 +17,9 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 | Computers (300 self-play games/table, 2026-10-28) | 3p H/M/E 67/32/1 %; Hard vs 2 Medium 45 % (fair 33); Medium vs 2 Easy 83 %; Hard vs 3 Medium 41 % (fair 25); 5p Hard vs 4 Medium 30 % (fair 20); 6p Hard vs 5 Medium 23 % (fair 17); 6p Medium vs 5 Easy 72 % |
 | Look: `_table` wood, `_fx` sounds/animations + settings, original tile art | Done |
 | Phone 393 / SE 320 / landscape / 1280 / 1440 | No page scroll at 4 and 6 players. Number tokens 4p: 13.7 / 9.5 / 12 / 28 / 33 px; 6p: 12.3 / 8.5 / 10.7 / 26 / 30 px (zoom button for SE) |
-| Tracker tab (old app, `tracker.html`) | Kept; photo button **removed** (needed a paid API key) |
+| Tabs renamed **Online play / In-person play** (2026-11-24) | Live c3d2289 |
+| **In-person play** (`tracker.html`, one page) | Live 2026-11-24: board on top, Random (legal board, `js/tracker-board.js`) or Manual (builder); lock hides builder, Edit unlocks (with Back). Side summary (Table + per player pips), small exp/actual dice bars, 2–12 boxes at bottom. Weighted switch (`js/weights.js`; Table row shows weights ×N). Blocked corners show a grey dot. ◀ top-left undoes anything (`js/undo.js`, 200 steps, not saved). Game saved in localStorage after every change. Photo button removed earlier |
+| **Online play extras** (2026-11-24) | Odds + Weighted switches in the "Place a town" heading (also in Settings); harbour tokens turned square to the coast (0 covered); live cards box (own hand by resource, others by count; phone: in Dice sheet); no odds on blocked corners; ◀ undoes UI choices + own local-game builds/trades until anyone moves, greyed otherwise (online.js has no take-back) |
 | Online rooms (`_online` v2) | **ON** (`ONLINE=true` in app.js). ~507 writes / 1,120 reads per 4p game (kit harness). 5–6p cost not measured. |
 
 ## Authorized next steps
@@ -28,6 +30,7 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 - Tim (brief 2026-10-27): "I want to make our boardgames the best in every single metric we can." Online: "talk to me before you're going to set something up that requires anything more than the firebase system we already have set up or takes up a large portion of our free plan."
 - Tim (2026-10-28): "Just make the games better." Base rules stay the default; variants only behind options. Original art and generic names (no "Seafarers"/extension trademarks).
 - Keep the tracker as its own tab (Tim uses it at real tables).
+- Tim (2026-11-24): "The two sections should be online play and in-person play"; odds numbers "should be a lever ... and they should never cover the little port simbles"; in-person: "combine the dice tracker and the board builder pages ... "random" button ... "manual" ..."; "make the resource totals for each player shown on the side ... live"; "weighted" numbers (scarce resource = more valuable, "you decide" the maths); no vertex sums where a settlement can't be built; "a universal back button in the top left".
 
 ## Traps
 - **online.js cache stamp (2026-10-27):** every import of `js/online.js` uses `?v=a3d0418b`, the `_online` content stamp. After a re-copy: put the new stamp from `node ../_online/tools/stamp.mjs` there, bump the importing file's `?v=` (and pwa.js `data-version`), then `node ../_online/tools/stamp.mjs --check .` must say OK.
@@ -48,6 +51,7 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 - 2026-10-28 5–6p: no beginner board (always random); balanced board applies to random boards only.
 - 2026-10-28 friendly robber: may not touch a player on 2 public points or fewer; if every tile is blocked, any tile is allowed.
 - 2026-10-28 balanced board: same resources never touch, same numbers never touch, 6/8 never touch, no corner over 12 dots.
+- 2026-11-24 weight per resource = clamp((mean pips per resource)/(its pips), 0.5, 2), 0 pips → 2; weighted corner sums shown as whole numbers in both modes.
 - 2026-10-28 "of N" shown next to your points when points-to-win isn't 10; phone seats hide dev/knight counts in 5–6p games.
 
 ## NOT verified

@@ -13,3 +13,10 @@
 - **Measured:** 31 tests (10 new, each failed on the old code first); measure.js 300 games/table incl. 5–6p (progress.md); ui-check 4p and 6p at 393/320/landscape/1280/1440 no scroll, no errors; ui-soak 3 six-player + 2 four-player games through the page, 0 illegal moves, 0 errors.
 - **Open (Tim):** special build phase vs paired players; balanced/friendly definitions; 5–6p online cost unmeasured.
 - **Kit sweep (same day, builder A1):** seat + "Points to win" selects get the dark own-drawn look (appearance none, SVG arrow; WebKit computed `appearance:none`, text #e8eaf0 on #161923); Settings 320 px already had no sideways scroll; 31/31 tests; no coach/pwa kit added (none here).
+
+## 2026-11-24 — Online play / In-person play (manager + 2 builders)
+- **Asked (Tim):** tabs "online play and in-person play"; odds numbers on a lever, never covering ports; in-person = one page (board top, Random/Manual, lock hides builder, side resource totals, small exp/actual dice graph, 2–12 boxes); live per-player resource totals online; "weighted" numbers (scarce = worth more); no sums where a settlement can't go; universal back button top-left.
+- **Decided:** weight formula clamp(mean/pips, 0.5, 2); Table row shows weights when Weighted is on; weighted corner sums whole numbers; online back only undoes UI + own local moves (online.js has no take-back); in-person game saved in localStorage.
+- **Built:** tracker.html rewrite + js/tracker-board.js, js/weights.js, js/undo.js; app.js levers, port token turn, cards box, blocked-corner filter, back button. Merges 8502fbd, then online-tweaks + c3d2289.
+- **Verified:** 42/42 `node --test "tests/*.test.*"`; builders' phone-view WebKit 393 px + 1440 px no page/sideways scroll; ui.tracker-save.mjs (save/reload/undo); real online room laptop + headless phone, 12 rolls; my smoke phone-view of merged main: no errors. Live c3d2289.
+- **Open:** real iPhone; 320 px for in-person.
