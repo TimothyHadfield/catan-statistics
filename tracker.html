@@ -440,7 +440,7 @@ return (
 ) : blocked.has(k) ? (
 <circle cx={v.x} cy={v.y} r={port ? 4.5 : 3.5} fill="#9ca3af" stroke={port ? '#FFD700' : 'none'} strokeWidth={port ? 2 : 0} data-blocked=""/>
 ) : (() => {
-const val = vertexValue(v), txt = W.fmt(val), dec = txt.includes('.');
+const val = vertexValue(v), txt = String(Math.round(val)), dec = false; // whole numbers: decimals are unreadable this small
 return (<>
 <circle cx={v.x} cy={v.y} r={dec ? 10 : 8} fill={getVertexColor(val)} opacity="0.9" stroke={port ? '#FFD700' : '#000'} strokeWidth={port ? 3 : 1}/>
 <text x={v.x} y={v.y} textAnchor="middle" dy={dec ? 3 : 4} fontSize={dec ? 8 : 11} fontWeight="bold" fill="#FFF" style={{pointerEvents: 'none'}} data-sum="">{txt}</text>
@@ -555,7 +555,7 @@ const summary = isLocked && (
 </div>
 <div className="flex items-center gap-0.5 py-0.5 border-t border-amber-200 font-bold text-amber-900" data-row="table">
 <span className="w-9 lg:w-16 text-xs lg:text-base">Table</span>
-{RES_LIST.map(r => <span key={r} className={cell}>{f(totals[r])}</span>)}
+{RES_LIST.map(r => <span key={r} className={cell}>{wts ? `×${f(wts[r])}` : f(totals[r])}</span>)}
 <span className={cell}>{f(RES_LIST.reduce((a, r) => a + totals[r], 0))}</span>
 </div>
 {placed.map(([p, s]) => (
