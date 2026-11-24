@@ -4,7 +4,7 @@
 // One online game costs ~500 Firestore writes with online.js v2 (_online/test/cost.mjs). false hides it.
 const ONLINE = true;
 if (ONLINE) import('./net.js?v=3');
-const E =window.CatanEngine, AI = window.CatanAI, CG = window.CatanGame;
+const E =window.CatanEngine, AI = window.CatanAI, CG = window.CatanGame, W = window.TrackerWeights;
 const { RES, COST } = E;
 let G = E.G; // the board shown now (E.G for 3-4 players, E.BIG for 5-6); set by useGeo()
 const $ = s => document.querySelector(s);
@@ -17,7 +17,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} },
 };
-const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, netName: '',
+const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, weighted: false, netName: '',
   friendly: false, balanced: false, vp: 10 }, store.get('catan.settings', {}));
 while (S.seats.length < 6) S.seats.push('medium');
 if (![3, 4, 5, 6].includes(S.n)) S.n = 4;
@@ -60,8 +60,8 @@ const humans = st => st.players.map((P, i) => (P.kind === 'human' ? i : -1)).fil
 
 // ------------------------------------------------------------ tabs, sheet, toast
 const TABS = [
-  ['play', 'Play', '<path d="M12 3l8 4.6v8.8L12 21l-8-4.6V7.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>'],
-  ['tracker', 'Tracker', '<path d="M5 20V10M10 20V5M15 20v-7M20 20v-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'],
+  ['play', 'Online play', '<path d="M12 3l8 4.6v8.8L12 21l-8-4.6V7.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>'],
+  ['tracker', 'In-person play', '<path d="M5 20V10M10 20V5M15 20v-7M20 20v-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'],
   ['settings', 'Settings', '<circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M5.5 18.5l2.1-2.1M16.4 7.6l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'],
 ];
 function renderTabs() {
@@ -85,16 +85,18 @@ function openSheet(html, onMount) {
   history.pushState(Object.assign({}, history.state, { sheet: 1 }), '', location.hash || '#play');
   sh.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeSheet()));
   if (onMount) onMount(sh);
+  updateBack();
 }
-function closeSheet(fromPop) { $('#sheet').hidden = true; $('#sheetBack').hidden = true; if (!fromPop && history.state && history.state.sheet) history.back(); }
+function closeSheet(fromPop) { $('#sheet').hidden = true; $('#sheetBack').hidden = true; if (!fromPop && history.state && history.state.sheet) history.back(); updateBack(); }
 $('#sheetBack').addEventListener('click', () => closeSheet());
 let toastT = 0;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2400); }
 const why = key => `<button class="q" data-why="${key}" aria-label="Why?">?</button>`;
 const WHY = {
   game: ['How to play', 'Roll, collect from tiles next to your towns, build. Road = wood + brick. Town = wood, brick, sheep, wheat. City = 2 wheat + 3 ore. Card = sheep, wheat, ore. First to 10 points wins. A 7 moves the robber: anyone with more than 7 cards gives back half.'],
-  odds: ['Spot odds', 'Numbers on open corners add up the dots of the tiles around them (a 6 or 8 is 5 dots, a 2 or 12 is 1). Each dot is one roll in 36, the same count as the Tracker.'],
-  online: ['Online', 'Make a room with an "Online friend" seat, then friends type its code here. Seats nobody takes become computers.'],
+  odds: ['Spot odds', 'Numbers on open corners add up the dots of the tiles around them (a 6 or 8 is 5 dots, a 2 or 12 is 1). Each dot is one roll in 36, the same count as In-person play.'],
+  weighted: ['Weighted', 'Corner numbers count a dot of a scarce resource for more and a common one for less. Each resource weighs (average dots per resource) ÷ (its dots on this board), between 0.5 and 2.'],
+  online: ['Online','Make a room with an "Online friend" seat, then friends type its code here. Seats nobody takes become computers.'],
   trade: ['Trading', 'Bank: 4 of one for 1. A 3:1 harbour or a 2:1 harbour of that kind is cheaper once you have a town on it. Offers to players: computers say yes when the deal helps them and you are not about to win.'],
   strong: ['How strong?', 'Measured in computer-only games in node; see Settings.'],
   extra: ['Extra build', 'With 5 or 6 players, after each turn everyone else gets a build step in turn order: build or buy a card, but no trading and no playing cards. It keeps the waits short. Players who can\'t afford anything are skipped.'],
@@ -151,7 +153,11 @@ function drawStatic(g) {
   // harbours: two piers and a token
   g.ports.forEach(p => {
     const [a, b] = G.E[p.e].v, [ax, ay] = pt(a), [bx, by] = pt(b), mx = (ax + bx) / 2, my = (ay + by) / 2;
-    const len = Math.hypot(mx, my), ox = mx / len, oy = my / len, tx = mx + ox * 0.66 * U, ty = my + oy * 0.66 * U;
+    // the token sits square out from its coast edge, so both corners are equally far from it and the
+    // corner markers (spot odds) never cover it (pointing it from the board centre put it on one corner)
+    let ox = ay - by, oy = bx - ax; const len = Math.hypot(ox, oy); ox /= len; oy /= len;
+    if (ox * mx + oy * my < 0) { ox = -ox; oy = -oy; }
+    const tx = mx + ox * 0.66 * U, ty = my + oy * 0.66 * U;
     const r = RES.indexOf(p.type);
     h += `<g class="port"><path d="M${ax},${ay}L${tx},${ty}M${bx},${by}L${tx},${ty}" class="pier"/>
       <circle cx="${tx}" cy="${ty}" r="${0.42 * U}" class="ptok" ${r >= 0 ? `style="stroke:${RES_COL[r]}"` : ''}/>
@@ -207,14 +213,22 @@ function drawLive(c) {
   });
   hl.verts.forEach(v => {
     const [x, y] = pt(v);
-    const odds = S.spotOdds && hl.kind === 'settle' ? spotPips(g, v) : '';
+    // a number only where a town may really go: empty corner, no building one road away
+    const odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotPips(g, v) : '';
     const fill = odds !== '' ? `;fill:hsl(${Math.round(Math.max(0, Math.min(1, (odds - 3) / 9)) * 120)},70%,80%)` : '';
-    h += `<g class="hl-v" data-v="${v}"><circle cx="${x}" cy="${y}" r="${0.3 * U}" class="hl-c" style="stroke:${colorOf(me)}${fill}"/>${odds !== '' ? `<text x="${x}" y="${y + 0.13 * U}" class="hl-t">${odds}</text>` : ''}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
+    const txt = String(odds);
+    h += `<g class="hl-v" data-v="${v}"><circle cx="${x}" cy="${y}" r="${0.3 * U}" class="hl-c" style="stroke:${colorOf(me)}${fill}"/>${odds !== '' ? `<text x="${x}" y="${y + (txt.length > 2 ? 0.1 : 0.13) * U}" class="hl-t${txt.length > 2 ? ' long' : ''}">${txt}</text>` : ''}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
   });
   hl.cities.forEach(v => { const [x, y] = pt(v); h += `<g class="hl-v" data-v="${v}"><circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hl-city"/><circle cx="${x}" cy="${y}" r="${0.45 * U}" class="hit"/></g>`; });
   $('#live').innerHTML = h;
 }
-const spotPips = (g, v) => G.V[v].hexes.reduce((a, h) => a + (h === g.robber ? 0 : E.pips(g.hexNum[h])), 0);
+// a corner's dots; with "Weighted" on, each dot counts by how scarce its resource is on this board
+// (maths shared with In-person play in js/weights.js; engine resources are 0..4 in the same order as W.RES)
+const boardWeights = g => W.weights(W.totals(g.hexRes.map((r, h) => ({ resource: W.RES[r], number: g.hexNum[h] }))));
+const spotPips = (g, v) => (S.weighted
+  ? Math.round(W.weightedSum(G.V[v].hexes.filter(h => h !== g.robber && g.hexRes[h] >= 0).map(h => ({ resource: W.RES[g.hexRes[h]], pips: E.pips(g.hexNum[h]) })), boardWeights(g)) * 10) / 10
+  : G.V[v].hexes.reduce((a, h) => a + (h === g.robber ? 0 : E.pips(g.hexNum[h])), 0));
+const openCorner = (g, v) => g.vOwner[v] < 0 && G.V[v].edges.every(e => G.E[e].v.every(u => g.vOwner[u] < 0));
 
 // my own turn after the roll, or my extra build step (5-6 players) on someone else's turn
 const buildingNow = (g, seat) => (g.phase === 'main' && g.turn === seat) || (g.phase === 'build' && g.build && g.build.queue[0] === seat);
@@ -313,11 +327,52 @@ function act(a) {
     window.CatanNet.act(a).then(r => { if (app.net) app.net.sending = false; if (!r.ok && !r.stale) toast(r.message); else if (r.stale) toast(r.message); });
     afterMyMove(a); return;
   }
+  const before = app.st;
   try { app.st = E.apply(JSON.parse(JSON.stringify(app.st)), c.seat, a); }
   catch (err) { toast(err.message); FX.play('error'); return; }
+  if (UNDO_GAME.includes(a.t) && app.st.phase !== 'over') pushUndo({ before, after: app.st, inMode: app.mode });
   afterMyMove(a);
   changed();
 }
+
+// ------------------------------------------------------------ back (top-left)
+// Takes back your own last step while nothing else has happened since: a switch you flicked, a build
+// choice or sheet you opened, or, in a game on this device, a town / road / city / bank trade before
+// anyone else moves. Rolls, bought cards, robbing and offers reveal new information, and online moves are
+// already shared with the other phones (online.js has no take-back), so those can't be undone.
+const UNDO_GAME = ['settle', 'road', 'city', 'bank'];
+const undo = [];
+function pushUndo(u) { undo.push(u); if (undo.length > 60) undo.shift(); }
+function setSetting(key, val) {
+  if (S[key] === val) return;
+  pushUndo({ ui: key, prev: S[key] });
+  S[key] = val; saveSettings(); render();
+}
+function undoTop() { // the newest step that can still be taken back; game steps go stale once the game moves on
+  while (undo.length) {
+    const u = undo[undo.length - 1];
+    if (u.ui || (u.mode && app.mode === u.mode) || (u.after && !app.net && app.st && app.st === u.after)) return u;
+    undo.pop();
+  }
+  return null;
+}
+const sheetOpen = () => !$('#sheet').hidden;
+function canBack() { return sheetOpen() || app.robHex >= 0 || !!app.mode || !!undoTop(); }
+function updateBack() { const b = $('#backBtn'); if (b) b.disabled = !canBack(); }
+function goBack() {
+  if (sheetOpen()) { closeSheet(); return; }
+  if (app.robHex >= 0) { app.robHex = -1; render(); return; }
+  const u = undoTop();
+  if (!u) { if (app.mode) { app.mode = null; render(); } return; }
+  undo.pop();
+  if (u.ui) { S[u.ui] = u.prev; saveSettings(); render(); return; }
+  if (u.mode) { app.mode = null; render(); return; }
+  clearTimeout(app.botTimer);
+  app.st = u.before; app.mode = u.inMode || null; app.robHex = -1; // back where you were: Town still chosen, tap again
+  FX.play('slide');
+  changed();
+}
+$('#backBtn').addEventListener('click', goBack);
 function afterMyMove(a) {
   if (['road', 'settle', 'city'].includes(a.t)) {
     const c = current();
@@ -497,6 +552,10 @@ function offerText(g, o, me) {
   const list = h => h.map((n, r) => (n ? n + ' ' + RES[r] : '')).filter(Boolean).join(' + ');
   return `<b>${o.from === me ? 'You' : esc(g.players[o.from].name)}</b> give ${list(o.give)} for ${list(o.get)}`;
 }
+// spot odds on/off right where you place a town (same setting as the Settings switch)
+// plus "Weighted": the same numbers counted by how scarce each resource is (also in Settings)
+const lever = (key, label) => `<label class="odds-lever">${label}<span class="switch sm"><input type="checkbox" data-lever="${key}" ${S[key] ? 'checked' : ''}><span></span></span></label>`;
+const levers = () => `${lever('spotOdds', 'Odds')}${lever('weighted', 'Weighted')}`;
 function panelHTML(c) {
   const { g, seat } = c, P = g.players[seat], mineTurn = c.toAct.includes(seat) && app.coverFor < 0;
   const head = (t, extra) => `<div class="head"><span class="h">${t}</span>${extra || ''}</div>`;
@@ -522,7 +581,7 @@ function panelHTML(c) {
     return `<div class="phase"><div class="row">${diceHTML(g)}<div class="grow"><div class="h hs">${t}</div>${status}</div></div>${o ? `<div class="offer small">${offerText(g, o, seat)}</div>` : ''}</div>`;
   }
   switch (g.phase) {
-    case 'setup': return `<div class="phase">${head(g.sub === 'settle' ? 'Place a town' : 'Place a road', S.spotOdds && g.sub === 'settle' ? why('odds') : '')}<div class="small muted">${g.sub === 'settle' ? (g.step >= g.n ? 'Your second town pays its tiles now.' : 'Numbers show each corner\'s dots.') : 'Next to the town you just placed.'}</div></div>`;
+    case 'setup': return `<div class="phase">${head(g.sub === 'settle' ? 'Place a town' : 'Place a road', g.sub === 'settle' ? `<span class="levers">${levers()}</span>` : '')}<div class="small muted">${g.sub === 'settle' ? (g.step >= g.n ? 'Your second town pays its tiles now.' : S.spotOdds ? 'Numbers show each corner\'s dots.' : 'Tap a glowing corner.') : 'Next to the town you just placed.'}${g.sub === 'settle' ? why('odds') : ''}</div></div>`;
     case 'roll': {
       const kn = E.playable(g, seat, 'K') > 0 && !g.devUsed;
       return `<div class="phase"><div class="row">${diceHTML(g)}<button class="btn warm grow big-btn" id="rollBtn">Roll</button>${kn ? '<button class="btn" data-dev="K">Knight first</button>' : ''}</div>${status}</div>`;
@@ -555,7 +614,9 @@ function panelHTML(c) {
       const canS = E.canPay(res, COST.settle) && E.settlesLeft(g, seat) && E.legalSettles(g, seat).length;
       const canC = E.canPay(res, COST.city) && E.citiesLeft(g, seat) && g.vOwner.some((o, v) => o === seat && g.vLevel[v] === 1);
       const canD = E.canPay(res, COST.dev) && g.deck > 0;
-      const hint = app.mode ? `<div class="last small">Tap a ${app.mode === 'road' ? 'glowing edge' : app.mode === 'city' ? 'ringed town' : 'glowing corner'} · <button class="link" id="cancelMode">cancel</button></div>`
+      // placing a town: the two switches take the hint's place (the corners glow; Town again or Back cancels)
+      const hint = app.mode === 'settle' ? `<div class="last small levers-line"><span class="levers">${levers()}</span><button class="link" id="cancelMode">cancel</button></div>`
+        : app.mode ? `<div class="last small">Tap a ${app.mode === 'road' ? 'glowing edge' : app.mode === 'city' ? 'ringed town' : 'glowing corner'} · <button class="link" id="cancelMode">cancel</button></div>`
         : extra ? `<div class="last small"><b>Extra build</b> ${why('extra')}</div>` : `<div class="last small muted">${esc(lastLine(c))}</div>`;
       // extra build step (5-6 players): no trading or cards, so the Trade slot stays empty
       const trade = extra ? '<span></span>' : '<button class="bld-btn" id="tradeBtn"><span>Trade</span><span class="cost tr">⇄</span></button>';
@@ -701,10 +762,12 @@ function chartHTML(g) {
     const act = g.rolls[n] / tot * 100, th = (6 - Math.abs(7 - n)) / 36 * 100;
     return `<div class="bar"><div class="bars"><i class="a" style="height:${act / max * 100}%"></i><i class="t" style="height:${th / max * 100}%"></i></div><b>${n}</b><span>${g.rolls[n]}</span></div>`;
   }).join('');
-  return `<div class="chart">${bars}</div><div class="small muted"><i class="key a"></i> rolled % <i class="key t"></i> expected (n/36, as in the Tracker) · ${g.rolls.reduce((a, b) => a + b, 0)} rolls</div>`;
+  return `<div class="chart">${bars}</div><div class="small muted"><i class="key a"></i> rolled % <i class="key t"></i> expected (n/36, as in In-person play) · ${g.rolls.reduce((a, b) => a + b, 0)} rolls</div>`;
 }
-function diceSheet(g) {
-  openSheet(`<div class="sheet-h"><span class="h">Dice this game</span><button class="btn sm ghost" data-close>Close</button></div>${chartHTML(g)}`);
+// phone: the dice box, with everyone's cards under it; kept current by render() while open
+const diceLiveHTML = c => `${chartHTML(c.g)}<div class="sep"></div>${handsHTML(c)}`;
+function diceSheet(c) {
+  openSheet(`<div class="sheet-h"><span class="h">Dice this game</span><button class="btn sm ghost" data-close>Close</button></div><div id="diceLive">${diceLiveHTML(c)}</div>`);
 }
 // laptop only: the table's recent events and the dice so far (hidden on phones by CSS)
 function feedLines(c, n) {
@@ -716,10 +779,23 @@ function feedLines(c, n) {
 function feedSheet(c) {
   openSheet(`<div class="sheet-h"><span class="h">Table</span><button class="btn sm ghost" data-close>Close</button></div><ul class="feed">${feedLines(c, 30)}</ul>`);
 }
+// everyone's cards, redrawn from the game state on every render: your own hand by kind; other
+// players' hands are secret in the shared state, so they show only their card count
+function handsHTML(c) {
+  const { g, seat } = c;
+  const order = [seat, ...g.players.map((_, i) => i).filter(i => i !== seat)];
+  return `<ul class="hands">${order.map(i => {
+    const P = g.players[i], known = Array.isArray(P.res);
+    const cells = known ? P.res.map((n, r) => `<span class="hc${n ? '' : ' zero'}" aria-label="${RES_NAME[r]} ${n}">${resIcon(r)}<b>${n}</b></span>`).join('')
+      : `<span class="hc" aria-label="${P.res} cards"><i class="ic-card"></i><b>${P.res}</b></span>`;
+    return `<li><i class="pc" style="background:${colorOf(i)}"></i><span class="hn">${esc(P.name)}</span>${cells}</li>`;
+  }).join('')}</ul>`;
+}
 function sideHTML(c) {
   const { g } = c;
-  return `<div class="phase side-only"><div class="cap">Table</div><ul class="feed">${feedLines(c, 9)}</ul></div>
-    <div class="phase side-only"><div class="cap">Dice this game</div>${chartHTML(g)}</div>`;
+  return `<div class="phase side-only"><div class="cap">Table</div><ul class="feed">${feedLines(c, g.n >= 5 ? 11 - g.n : 12 - g.n)}</ul></div>
+    <div class="phase side-only"><div class="cap">Dice this game</div>${chartHTML(g)}</div>
+    <div class="phase side-only" id="handsBox">${handsHTML(c)}</div>`;
 }
 
 // ------------------------------------------------------------ settings
@@ -733,6 +809,7 @@ function settingsPanel() {
     <div class="phase"><div class="head"><span class="h">Game</span></div>
       <div class="set-row"><span class="grow">Computer speed</span>${seg('speed', [['normal', 'Normal'], ['fast', 'Fast']])}</div>
       <div class="set-row"><span class="grow">Spot odds ${why('odds')}</span><label class="switch"><input type="checkbox" id="oddsSw" ${S.spotOdds ? 'checked' : ''}><span></span></label></div>
+      <div class="set-row"><span class="grow">Weighted ${why('weighted')}</span><label class="switch"><input type="checkbox" data-sw="weighted" ${S.weighted ? 'checked' : ''}><span></span></label></div>
     </div>
     <div class="phase"><div class="head"><span class="h">House rules</span></div>
       <div class="set-row"><span class="grow">Friendly robber<span class="sub">Robber can't touch a player on 2 points or fewer.</span></span><label class="switch"><input type="checkbox" data-sw="friendly" ${S.friendly ? 'checked' : ''}><span></span></label></div>
@@ -747,6 +824,9 @@ function settingsPanel() {
 
 // ------------------------------------------------------------ render
 function render() {
+  renderMain(); updateBack();
+}
+function renderMain() {
   document.body.dataset.tab = app.tab;
   $('#playView').hidden = app.tab !== 'play';
   $('#trackerView').hidden = app.tab !== 'tracker';
@@ -765,6 +845,7 @@ function render() {
     bindPanel(); return;
   }
   drawStatic(c.g);
+  const dl = $('#diceLive'); if (dl && !$('#sheet').hidden) dl.innerHTML = diceLiveHTML(c);
   fxStep(c);
   drawLive(c);
   $('#seats').hidden = false; $('#seats').innerHTML = seatsHTML(c); $('#seats').classList.toggle('many', c.g.n >= 5);
@@ -772,7 +853,7 @@ function render() {
   $('#mine').hidden = noHand; $('#mine').innerHTML = noHand ? '' : mineHTML(c);
   $('#panel').innerHTML = app.coverFor >= 0 ? `<div class="phase cover"><div class="h">Pass to ${esc(c.g.players[app.coverFor].name)}</div><button class="btn primary block" id="readyBtn" style="margin-top:10px">I'm ${esc(c.g.players[app.coverFor].name)}</button></div>` : panelHTML(c);
   if (app.coverFor < 0) $('#panel').insertAdjacentHTML('beforeend', sideHTML(c));
-  if (c.online) $('#panel').insertAdjacentHTML('beforeend', `<div class="row netbar small muted"><span class="grow">Room ${esc(app.net.code)}</span><button class="btn sm ghost" id="leaveBtn">Leave</button></div>`);
+  if (c.online) $('#panel').insertAdjacentHTML('beforeend', `<div class="row netbar small muted"><button class="btn sm ghost" id="diceBtn">Dice</button><span class="grow">Room ${esc(app.net.code)}</span><button class="btn sm ghost" id="leaveBtn">Leave</button></div>`);
   else if (c.g.phase !== 'over') $('#panel').insertAdjacentHTML('beforeend', `<div class="row netbar small muted"><button class="btn sm ghost" id="diceBtn">Dice</button><span class="grow"></span><button class="btn sm ghost" id="quitBtn">Quit game</button></div>`);
   document.querySelectorAll('#dice .tbl-die').forEach(d => TABLE.die(d, +d.dataset.v));
   bindPanel();
@@ -786,10 +867,10 @@ function demoBoard() { // shown behind the new-game panel: the beginner board, o
 function renderSettings() {
   $('#settingsView').innerHTML = settingsPanel();
   FX.renderSettings($('#fxSet'));
-  document.querySelectorAll('[data-set] [data-v]').forEach(b => b.addEventListener('click', () => { S[b.closest('[data-set]').dataset.set] = b.dataset.v; saveSettings(); renderSettings(); }));
-  $('#oddsSw').addEventListener('change', e => { S.spotOdds = e.target.checked; saveSettings(); });
-  document.querySelectorAll('[data-sw]').forEach(sw => sw.addEventListener('change', () => { S[sw.dataset.sw] = sw.checked; saveSettings(); }));
-  $('#vpSel').addEventListener('change', e => { S.vp = +e.target.value; saveSettings(); });
+  document.querySelectorAll('[data-set] [data-v]').forEach(b => b.addEventListener('click', () => setSetting(b.closest('[data-set]').dataset.set, b.dataset.v)));
+  $('#oddsSw').addEventListener('change', e => setSetting('spotOdds', e.target.checked));
+  document.querySelectorAll('[data-sw]').forEach(sw => sw.addEventListener('change', () => setSetting(sw.dataset.sw, sw.checked)));
+  $('#vpSel').addEventListener('change', e => setSetting('vp', +e.target.value));
 }
 function bindPanel() {
   const on = (sel, f) => document.querySelectorAll(sel).forEach(b => b.addEventListener('click', e => f(b, e)));
@@ -797,6 +878,7 @@ function bindPanel() {
   on('[data-tab-go]', b => goTab(b.dataset.tabGo, true));
   on('#boardSeg [data-board]', b => { S.board = b.dataset.board; saveSettings(); render(); });
   document.querySelectorAll('[data-seat]').forEach(sel => sel.addEventListener('change', () => { S.seats[+sel.dataset.seat] = sel.value; saveSettings(); render(); }));
+  document.querySelectorAll('[data-lever]').forEach(sw => sw.addEventListener('change', () => setSetting(sw.dataset.lever, sw.checked)));
   on('#startBtn', startGame);
   on('#joinBtn', joinRoom);
   const nmEl = $('#netName'); if (nmEl) nmEl.addEventListener('change', () => { S.netName = nmEl.value.trim().slice(0, 20); saveSettings(); });
@@ -808,7 +890,9 @@ function bindPanel() {
   on('[data-build]', b => {
     const k = b.dataset.build;
     if (k === 'buy') { act({ t: 'buy' }); return; }
-    app.mode = app.mode === k ? null : k; render();
+    app.mode = app.mode === k ? null : k;
+    if (app.mode) pushUndo({ mode: app.mode });
+    render();
   });
   on('#cancelMode', () => { app.mode = null; render(); });
   on('[data-dev]', b => playDev(b.dataset.dev));
@@ -824,7 +908,7 @@ function bindPanel() {
   on('#readyBtn', () => { app.coverFor = -1; render(); });
   on('#againBtn', () => { app.st = null; store.del('catan.game'); if (app.net) leaveRoom(); else render(); });
   on('#quitBtn', () => openSheet(`<div class="sheet-h"><span class="h">Quit this game?</span><button class="btn sm ghost" data-close>Keep playing</button></div><button class="btn block" id="quitYes">Quit</button>`, sh => sh.querySelector('#quitYes').addEventListener('click', () => { closeSheet(); clearTimeout(app.botTimer); app.st = null; store.del('catan.game'); render(); })));
-  on('#diceBtn', () => { const c = current(); if (c) diceSheet(c.g); });
+  on('#diceBtn', () => { const c = current(); if (c) diceSheet(c); });
   on('[data-feed]', () => { const c = current(); if (c) feedSheet(c); });
 }
 function playDev(k) {

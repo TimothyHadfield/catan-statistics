@@ -23,6 +23,10 @@ button { cursor: pointer; }
 .top { display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--line); min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 750; font-size: 17px; letter-spacing: .02em; }
 .brand svg { width: 24px; height: 24px; }
+.back-btn { flex: none; width: 36px; height: 36px; margin: 0 -6px 0 -6px; display: grid; place-items: center; background: none; border: 0; border-radius: 9px; color: var(--text); padding: 0; cursor: pointer; }
+.back-btn svg { width: 22px; height: 22px; }
+.back-btn:disabled { color: var(--muted); opacity: .35; cursor: default; }
+.back-btn:not(:disabled):active { transform: scale(.92); background: var(--card); }
 .ver { margin-left: auto; color: var(--muted); font-size: 11px; }
 .tabs-top { display: none; gap: 4px; }
 .tabs-top button { background: none; border: 0; padding: 8px 14px; border-radius: 9px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 6px; }
@@ -94,6 +98,7 @@ body.at-table.game-over .board-wrap { max-height: calc(100dvh - var(--head) - va
 #board .hit-edge { stroke: transparent; stroke-width: 17; cursor: pointer; }
 #board .hl-c { fill: rgba(255,255,255,.92); stroke-width: 3; }
 #board .hl-t { font: 800 13.5px system-ui, sans-serif; fill: #1b1410; text-anchor: middle; pointer-events: none; }
+#board .hl-t.long { font-size: 10px; letter-spacing: -.3px; }
 #board .hl-city { fill: none; stroke: #fff; stroke-width: 3; stroke-dasharray: 4 3; animation: march .7s linear infinite; }
 #board .hit { fill: transparent; cursor: pointer; }
 #board .hl-v:hover .hl-c { fill: #fff6c8; }
@@ -246,6 +251,23 @@ button.rc { font: inherit; padding: 0; cursor: pointer; }
 .switch span::before { content: ''; position: absolute; width: 22px; height: 22px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .2s; }
 .switch input:checked + span { background: var(--good); }
 .switch input:checked + span::before { transform: translateX(18px); }
+/* everyone's cards (laptop side, phone dice sheet) */
+.hands { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.hands li { display: flex; align-items: center; gap: 7px; padding: 4px 0; border-bottom: 1px solid rgba(42,48,66,.6); }
+.hands li:last-child { border-bottom: 0; }
+.hands .hn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hands .hc { display: inline-flex; align-items: center; gap: 3px; min-width: 32px; font-variant-numeric: tabular-nums; }
+.hands .hc .ri { width: 16px; height: 16px; }
+.hands .hc.zero { opacity: .4; }
+.hands .hc .ic-card { margin: 0 3px 0 4px; }
+/* spot odds lever on the play screen while placing a town */
+.levers { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+.levers-line { display: flex; align-items: center; gap: 10px; overflow: visible; min-height: 22px; }
+@media (max-width: 360px) { .levers, .levers-line { gap: 8px; } .levers-line #cancelMode { display: none; } .odds-lever { gap: 4px; } }
+.odds-lever { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.switch.sm { display: inline-block; width: 34px; height: 20px; }
+.switch.sm span::before { width: 16px; height: 16px; }
+.switch.sm input:checked + span::before { transform: translateX(14px); }
 table.str { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 table.str th, table.str td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 table.str th { color: var(--muted); font-weight: 650; font-size: 12px; }
