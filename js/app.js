@@ -4,7 +4,7 @@
 // One online game costs ~500 Firestore writes with online.js v2 (_online/test/cost.mjs). false hides it.
 const ONLINE = true;
 if (ONLINE) import('./net.js?v=3');
-const E =window.CatanEngine, AI = window.CatanAI, CG = window.CatanGame, W = window.CatanWeights;
+const E =window.CatanEngine, AI = window.CatanAI, CG = window.CatanGame, W = window.TrackerWeights;
 const { RES, COST } = E;
 let G = E.G; // the board shown now (E.G for 3-4 players, E.BIG for 5-6); set by useGeo()
 const $ = s => document.querySelector(s);
@@ -223,7 +223,10 @@ function drawLive(c) {
   $('#live').innerHTML = h;
 }
 // a corner's dots; with "Weighted" on, each dot counts by how scarce its resource is on this board
-const spotPips = (g, v) => (S.weighted ? W.weightedSpot(G.V[v].hexes, g.hexRes, g.hexNum, W.weights(g.hexRes, g.hexNum), g.robber)
+// (maths shared with In-person play in js/weights.js; engine resources are 0..4 in the same order as W.RES)
+const boardWeights = g => W.weights(W.totals(g.hexRes.map((r, h) => ({ resource: W.RES[r], number: g.hexNum[h] }))));
+const spotPips = (g, v) => (S.weighted
+  ? Math.round(W.weightedSum(G.V[v].hexes.filter(h => h !== g.robber && g.hexRes[h] >= 0).map(h => ({ resource: W.RES[g.hexRes[h]], pips: E.pips(g.hexNum[h]) })), boardWeights(g)) * 10) / 10
   : G.V[v].hexes.reduce((a, h) => a + (h === g.robber ? 0 : E.pips(g.hexNum[h])), 0));
 const openCorner = (g, v) => g.vOwner[v] < 0 && G.V[v].edges.every(e => G.E[e].v.every(u => g.vOwner[u] < 0));
 
@@ -790,7 +793,7 @@ function handsHTML(c) {
 }
 function sideHTML(c) {
   const { g } = c;
-  return `<div class="phase side-only"><div class="cap">Table</div><ul class="feed">${feedLines(c, 9)}</ul></div>
+  return `<div class="phase side-only"><div class="cap">Table</div><ul class="feed">${feedLines(c, g.n >= 5 ? 11 - g.n : 12 - g.n)}</ul></div>
     <div class="phase side-only"><div class="cap">Dice this game</div>${chartHTML(g)}</div>
     <div class="phase side-only" id="handsBox">${handsHTML(c)}</div>`;
 }
