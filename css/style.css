@@ -168,6 +168,14 @@ body.at-table .board-wrap { max-height: calc(100dvh - var(--head) - var(--tabh) 
 #board .hit { fill: transparent; cursor: pointer; }
 #board .hl-v:hover .hl-c { stroke: #1b1410; stroke-width: 2; }
 .fx-still #board .hl-edge, .fx-still #board .hl-city { animation: none; }
+/* Advisor suggestion rings (2026-11-25): gold #1, silver #2, dashed seat colour = opponent's likely setup pick.
+   Thin stroke over a dark hairline so it reads on light tiles; no fill, never takes taps, never moves. */
+#board .adv { pointer-events: none; }
+#board .adv-u { fill: none; stroke: rgba(0,0,0,.55); stroke-width: 3.8; }
+#board .adv-r { fill: none; stroke-width: 2.2; }
+#board .adv-r.opp { stroke-dasharray: 3.2 2.4; }
+.bld-btn.adv-g { outline: 2px solid #f2c14e; outline-offset: -2px; }
+.bld-btn.adv-s { outline: 2px solid #c9ced6; outline-offset: -2px; }
 .fly-card { position: fixed; width: 18px; height: 24px; border-radius: 3px; border: 1.5px solid #f3e7c9; box-shadow: 0 2px 5px rgba(0,0,0,.5); z-index: 60; pointer-events: none; }
 /* table effects (2026-11-24): centre dice, resource cards out of tiles, rings on new pieces; overlay only, never takes taps */
 /* the roll's dice sit over the action panel, beside the board (never over tiles); app.js sets the box and --die-size */
