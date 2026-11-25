@@ -105,7 +105,7 @@ const WHY = {
   odds: ['Spot odds', 'Numbers on open corners add up the dots of the tiles around them (a 6 or 8 is 5 dots, a 2 or 12 is 1). Each dot is one roll in 36, the same count as In-person play.'],
   weighted: ['Weighted', 'Corner numbers count a dot of a scarce resource for more and a common one for less. Each resource weighs (average dots per resource) ÷ (its dots on this board), between 0.5 and 2.'],
   mine: ['Mine', 'With Weighted on, weights fit you: a resource counts more the less of it you already get compared with what building needs (2 roads + town + city + card: wheat and ore 4, wood and brick 3, sheep 2). Being scarce on corners still open only nudges it up a little.'],
-  advisor: ['Advisor', 'Corner numbers become a score for you: your Mine value, plus a bonus for resources and numbers you lack, plus what the corner is worth to the opponent who could reach it soonest, plus good corners next to it that an opponent\'s roads were heading for. Scaled so an average corner keeps its usual dots. Applies to In-person play too (selected colour).'],
+  advisor: ['Advisor', 'Corner numbers become a score for you: your Mine value, plus a bonus for resources and numbers you lack, plus what the corner is worth to the opponent who could reach it soonest, plus good corners next to it that an opponent\'s roads were heading for. Scaled so an average corner keeps its usual dots. Applies to In-person play too (selected colour). In Online play, rings show suggestions: gold = best, silver = next, a player\'s colour = where they will likely place a town first.'],
   online: ['Online','Make a room with an "Online friend" seat, then friends type its code here. Seats nobody takes become computers.'],
   trade: ['Trading', 'Bank: 4 of one for 1. A 3:1 harbour or a 2:1 harbour of that kind is cheaper once you have a town on it. Offers to players: computers say yes when the deal helps them and you are not about to win.'],
   strong: ['How strong?', 'Measured in computer-only games in node; see Settings.'],
@@ -227,7 +227,60 @@ function drawLive(c) {
     h += `<g class="hl-v" data-v="${v}">${odds !== '' ? ART.oddsBadge(x, y, U, odds) : `<circle cx="${x}" cy="${y}" r="${0.11 * U}" class="hl-dot"/>`}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
   });
   hl.cities.forEach(v => { const [x, y] = pt(v); h += `<g class="hl-v" data-v="${v}"><circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hl-city"/><circle cx="${x}" cy="${y}" r="${0.45 * U}" class="hit"/></g>`; });
+  const sug = adviceFor(c);
+  if (sug) h += ringsSVG(sug);
   $('#live').innerHTML = h;
+}
+// ------------------------------------------------------------ Advisor suggestion rings (js/advice.js)
+// Tim 2026-11-25: "a gold circle around a odds number showing high suggestion ... and a silver circle around to
+// show less suggestion". Gold = #1, silver = #2, a player's colour (dashed) = where that player will likely put a
+// setup town before your next one. Thin strokes over a dark hairline, no fill, never take taps.
+const GOLD = '#f2c14e', SILVER = '#c9ced6';
+const advice = { key: '', val: null };
+function canBuild(g, seat) {
+  const res = g.players[seat].res;
+  return {
+    road: !!(E.canPay(res, COST.road) && E.roadsLeft(g, seat) && E.legalRoads(g, seat).length),
+    settle: !!(E.canPay(res, COST.settle) && E.settlesLeft(g, seat) && E.legalSettles(g, seat).length),
+    city: !!(E.canPay(res, COST.city) && E.citiesLeft(g, seat) && g.vOwner.some((o, v) => o === seat && g.vLevel[v] === 1)),
+    buy: !!(E.canPay(res, COST.dev) && g.deck > 0),
+  };
+}
+function adviceFor(c) {
+  const { g, seat } = c, AD = window.CatanAdvice;
+  if (!S.advisor || seat < 0 || !AD || !g.players[seat] || g.phase === 'over') return null;
+  const P = g.players[seat];
+  const key = [g.logN, seat, g.phase, g.sub, g.step, g.turn, app.mode, g.vOwner.join(), g.vLevel.join(), g.eOwner.join(), String(P.res), g.deck, g.freeRoads].join('|');
+  if (advice.key === key) return advice.val;
+  const out = { gold: [], silver: [], opp: [], goldEdges: [], silverEdges: [], goldCity: [], silverCity: [], btn: [] };
+  try {
+    if (g.phase === 'setup') Object.assign(out, AD.setup(g, seat));
+    else {
+      const ups = AD.upgrades(g, seat);
+      ups.slice(0, 2).forEach((u, i) => { const k = (i ? 'silver' : 'gold') + (u.kind === 'city' ? 'City' : ''); out[k].push(u.v); });
+      const mine = buildingNow(g, seat), can = mine ? canBuild(g, seat) : null;
+      const roadMode = (g.phase === 'roads' && g.turn === seat) || (mine && app.mode === 'road');
+      const r = roadMode || (can && can.road) ? AD.roads(g, seat, E.legalRoads(g, seat)) : [];
+      if (roadMode) { if (r[0]) out.goldEdges.push(r[0].e); if (r[1]) out.silverEdges.push(r[1].e); }
+      if (can) out.btn = AD.buttons(g, seat, can, ups, r[0] ? r[0].score : 0);
+    }
+  } catch (err) { console.warn('advice', err); }
+  advice.key = key; advice.val = out;
+  return out;
+}
+function ringsSVG(a) {
+  const ring = (x, y, r, col, opp) => `<circle cx="${x}" cy="${y}" r="${r}" class="adv-u"/><circle cx="${x}" cy="${y}" r="${r}" class="adv-r${opp ? ' opp' : ''}" style="stroke:${col}"/>`;
+  const at = (v, r, col, opp) => { const [x, y] = pt(v); return ring(x, y, r * U, col, opp); };
+  const mid = (e, col) => { const [a1, b1] = G.E[e].v, [ax, ay] = pt(a1), [bx, by] = pt(b1); return ring((ax + bx) / 2, (ay + by) / 2, 0.2 * U, col); };
+  let h = '<g class="adv">';
+  a.opp.forEach(x => { h += at(x.v, 0.31, colorOf(x.p), true); });
+  a.silver.forEach(v => { h += at(v, a.gold.includes(v) ? 0.37 : 0.31, SILVER); });
+  a.gold.forEach(v => { h += at(v, 0.31, GOLD); });
+  a.silverCity.forEach(v => { h += at(v, 0.44, SILVER); });
+  a.goldCity.forEach(v => { h += at(v, 0.44, GOLD); });
+  a.silverEdges.forEach(e => { h += mid(e, SILVER); });
+  a.goldEdges.forEach(e => { h += mid(e, GOLD); });
+  return h + '</g>';
 }
 // a corner's dots; with "Weighted" on, each dot counts by how scarce its resource is on this board
 // (maths shared with In-person play in js/weights.js; engine resources are 0..4 in the same order as W.RES)
@@ -808,12 +861,12 @@ function panelHTML(c) {
     }
     case 'main':
     case 'build': {
-      const res = P.res, extra = g.phase === 'build';
-      const b = (id, label, cost, ok) => `<button class="bld-btn${app.mode === id ? ' on' : ''}" data-build="${id}" ${ok ? '' : 'disabled'}><span>${label}</span><span class="cost">${costHTML(cost)}</span></button>`;
-      const canR = E.canPay(res, COST.road) && E.roadsLeft(g, seat) && E.legalRoads(g, seat).length;
-      const canS = E.canPay(res, COST.settle) && E.settlesLeft(g, seat) && E.legalSettles(g, seat).length;
-      const canC = E.canPay(res, COST.city) && E.citiesLeft(g, seat) && g.vOwner.some((o, v) => o === seat && g.vLevel[v] === 1);
-      const canD = E.canPay(res, COST.dev) && g.deck > 0;
+      const extra = g.phase === 'build';
+      // Advisor on: gold / silver outline on the #1 / #2 suggested purchase (js/advice.js buttons())
+      const sug = adviceFor(c), pick = sug ? sug.btn : [];
+      const ring = id => (pick[0] === id ? ' adv-g' : pick[1] === id ? ' adv-s' : '');
+      const b = (id, label, cost, ok) => `<button class="bld-btn${app.mode === id ? ' on' : ''}${ring(id)}" data-build="${id}" ${ok ? '' : 'disabled'}><span>${label}</span><span class="cost">${costHTML(cost)}</span></button>`;
+      const can = canBuild(g, seat), canR = can.road, canS = can.settle, canC = can.city, canD = can.buy;
       // placing a town: the two switches take the hint's place (the corners glow; Town again or Back cancels)
       const hint = app.mode === 'settle' || app.mode === 'road' ?`<div class="last small levers-line"><span class="levers">${levers(false)}</span><button class="link" id="cancelMode">cancel</button></div>`
         : app.mode ? `<div class="last small">Tap a ${app.mode === 'road' ? 'glowing edge' : app.mode === 'city' ? 'ringed town' : 'glowing corner'} · <button class="link" id="cancelMode">cancel</button></div>`
@@ -1064,7 +1117,7 @@ function renderMain() {
   $('#playView').hidden = app.tab !== 'play';
   $('#trackerView').hidden = app.tab !== 'tracker';
   $('#settingsView').hidden = app.tab !== 'settings';
-  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=8'; return; }
+  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=9'; return; }
   if (app.tab === 'settings') { renderSettings(); return; }
   const c = current();
   const lobby = app.net && (app.net.status === 'lobby' || app.net.status === 'joining');
