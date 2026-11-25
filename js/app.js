@@ -17,7 +17,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} },
 };
-const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, oddsAll: false, weighted: false, mine: false, netName: '',
+const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, oddsAll: false, weighted: false, mine: false, advisor: false, netName: '',
   friendly: false, balanced: false, vp: 10 }, store.get('catan.settings', {}));
 while (S.seats.length < 6) S.seats.push('medium');
 if (![3, 4, 5, 6].includes(S.n)) S.n = 4;
@@ -26,6 +26,12 @@ if (!ONLINE) S.seats = S.seats.map(s => (s === 'online' ? 'medium' : s));
 // the rules a new game starts with (house rules are off by default, set in Settings)
 const gameRules = () => ({ board: S.board, vp: S.vp, friendly: !!S.friendly, balanced: !!S.balanced });
 const saveSettings = () => store.set('catan.settings', S);
+// In-person play (iframe) can flip "Advisor" too: pick it up so a later save here doesn't undo it
+addEventListener('storage', e => {
+  if (e.key !== 'catan.settings') return;
+  const a = !!store.get('catan.settings', {}).advisor;
+  if (a !== !!S.advisor) { S.advisor = a; if (typeof render === 'function' && app.tab !== 'tracker') render(); }
+});
 
 // ------------------------------------------------------------ app state
 const app = {
@@ -99,6 +105,7 @@ const WHY = {
   odds: ['Spot odds', 'Numbers on open corners add up the dots of the tiles around them (a 6 or 8 is 5 dots, a 2 or 12 is 1). Each dot is one roll in 36, the same count as In-person play.'],
   weighted: ['Weighted', 'Corner numbers count a dot of a scarce resource for more and a common one for less. Each resource weighs (average dots per resource) ÷ (its dots on this board), between 0.5 and 2.'],
   mine: ['Mine', 'With Weighted on, weights fit you: a resource counts more the less of it you already get compared with what building needs (2 roads + town + city + card: wheat and ore 4, wood and brick 3, sheep 2). Being scarce on corners still open only nudges it up a little.'],
+  advisor: ['Advisor', 'Corner numbers become a score for you: your Mine value, plus a bonus for resources and numbers you lack, plus what the corner is worth to the opponent who could reach it soonest, plus good corners next to it that an opponent\'s roads were heading for. Scaled so an average corner keeps its usual dots. Applies to In-person play too (selected colour).'],
   online: ['Online','Make a room with an "Online friend" seat, then friends type its code here. Seats nobody takes become computers.'],
   trade: ['Trading', 'Bank: 4 of one for 1. A 3:1 harbour or a 2:1 harbour of that kind is cheaper once you have a town on it. Offers to players: computers say yes when the deal helps them and you are not about to win.'],
   strong: ['How strong?', 'Measured in computer-only games in node; see Settings.'],
@@ -196,12 +203,13 @@ function drawLive(c) {
     h += g.vLevel[v] === 2 ? city(x, y, colorOf(o)) : house(x, y, 0.27, 'bld', colorOf(o));
   });
   // what I may tap now
-  const hl = targets(c), wNow = weightsFor(g, me);
+  const hl = targets(c), wNow = weightsFor(g, me), adv = S.spotOdds ? advisorFor(g, me) : null;
+  const spotVal = v => (adv && adv[v] != null ? Math.round(adv[v]) : spotPips(g, v, wNow));
   // Odds on: when not placing a town, every open corner still shows its number (look-only, taps pass through)
   // badges are small and have no coloured ring (Tim 2026-11-24: "making the odds circles smaller and removing the red circle")
   if (S.spotOdds && hl.kind !== 'settle') g.vOwner.forEach((o, v) => {
     if (!openCorner(g, v)) return;
-    const [x, y] = pt(v), odds = spotPips(g, v, wNow);
+    const [x, y] = pt(v), odds = spotVal(v);
     if (!ART.oddsShown(odds, S.oddsAll)) return; // summarized: red corners hidden (Tim 2026-11-25)
     h += `<g class="odds-p">${ART.oddsBadge(x, y, U, odds)}</g>`;
   });
@@ -214,7 +222,7 @@ function drawLive(c) {
     const [x, y] = pt(v);
     // a number only where a town may really go: empty corner, no building one road away
     // Odds off: a small soft dot marks the spot instead of an empty white circle; the tap circle stays full size
-    let odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotPips(g, v, wNow) : '';
+    let odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotVal(v) : '';
     if (odds !== '' && !ART.oddsShown(odds, S.oddsAll)) odds = ''; // red corners: just the dot
     h += `<g class="hl-v" data-v="${v}">${odds !== '' ? ART.oddsBadge(x, y, U, odds) : `<circle cx="${x}" cy="${y}" r="${0.11 * U}" class="hl-dot"/>`}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
   });
@@ -240,6 +248,13 @@ function weightsFor(g, seat) {
   return W.personal(ownDots(g, seat), open, boardTot(g));
 }
 const spotPips = (g, v, w) => (w ? Math.round(W.weightedSum(cornerHexes(g, v), w)) : G.V[v].hexes.reduce((a, h) => a + E.pips(g.hexNum[h]), 0));
+// "Advisor" (js/advisor.js): each open corner's score for this seat (your value + new resources/numbers +
+// denying opponents + cutting their roads), on the dot scale; null when off. Replaces the corner numbers.
+function advisorFor(g, seat) {
+  if (!S.advisor || seat < 0 || !window.CatanAdvisor) return null;
+  const A = window.CatanAdvisor;
+  return A.scores(Object.assign(A.fromEngine(g, G, E.pips), { me: seat })).score;
+}
 
 // my own turn after the roll, or my extra build step (5-6 players) on someone else's turn
 const buildingNow = (g, seat) => (g.phase === 'main' && g.turn === seat) || (g.phase === 'build' && g.build && g.build.queue[0] === seat);
@@ -713,8 +728,10 @@ function offerText(g, o, me) {
 // plus "Weighted": the same numbers counted by how scarce each resource is (also in Settings)
 const lever = (key, label) => `<label class="odds-lever">${label}<span class="switch sm"><input type="checkbox" data-lever="${key}" ${S[key] ? 'checked' : ''}><span></span></span></label>`;
 // "Mine" shows only while Weighted is on
-const wLevers = () => `${lever('weighted', 'Weighted')}${S.weighted ? lever('mine', 'Mine') : ''}`;
-const levers = () => `${lever('spotOdds', 'Odds')}${wLevers()}`;
+// "Advisor" sits after them (its own setting; it does not need Weighted). The one-line strip beside the dice
+// in road/town mode has no room for a fourth switch, so it leaves Advisor out (Settings and the dots table have it).
+const wLevers = (adv = true) => `${lever('weighted', 'Weighted')}${S.weighted ? lever('mine', 'Mine') : ''}${adv ? lever('advisor', 'Advisor') : ''}`;
+const levers = (adv = true) => `${lever('spotOdds', 'Odds')}${wLevers(adv)}`;
 // the few seconds between the winning play and the end screen: the table stays as it was
 const FINALE_MS = 5000, FINALE_FAST = 2500;
 function finaleHTML(c) {
@@ -749,7 +766,7 @@ function panelHTML(c) {
     return `<div class="phase"><div class="row">${diceHTML(g)}<div class="grow"><div class="h hs">${t}</div>${status}</div></div>${o ? `<div class="offer small">${offerText(g, o, seat)}</div>` : ''}</div>`;
   }
   switch (g.phase) {
-    case 'setup': return `<div class="phase">${head(g.sub === 'settle' ? 'Place a town' : 'Place a road', `<span class="levers">${levers()}</span>`)}<div class="small muted">${g.sub === 'settle' ? (g.step >= g.n ? 'Your second town pays its tiles now.' : S.spotOdds ? 'Numbers show each corner\'s dots.' : 'Tap a glowing corner.') : 'Next to the town you just placed.'}${g.sub === 'settle' ? why('odds') : ''}</div></div>`;
+    case 'setup': return `<div class="phase">${head(g.sub === 'settle' ? 'Place a town' : 'Place a road', `<span class="levers">${levers()}</span>`)}<div class="small muted">${g.sub === 'settle' ? (g.step >= g.n ? 'Your second town pays its tiles now.' : S.spotOdds ? (S.advisor ? 'Numbers show Advisor scores.' : 'Numbers show each corner\'s dots.') :'Tap a glowing corner.') : 'Next to the town you just placed.'}${g.sub === 'settle' ? why('odds') : ''}</div></div>`;
     case 'roll': {
       const kn = E.playable(g, seat, 'K') > 0 && !g.devUsed;
       return `<div class="phase"><div class="row">${diceHTML(g)}<button class="btn warm grow big-btn" id="rollBtn">Roll</button>${kn ? '<button class="btn" data-dev="K">Knight first</button>' : ''}</div>${status}</div>`;
@@ -783,7 +800,7 @@ function panelHTML(c) {
       const canC = E.canPay(res, COST.city) && E.citiesLeft(g, seat) && g.vOwner.some((o, v) => o === seat && g.vLevel[v] === 1);
       const canD = E.canPay(res, COST.dev) && g.deck > 0;
       // placing a town: the two switches take the hint's place (the corners glow; Town again or Back cancels)
-      const hint = app.mode === 'settle' || app.mode === 'road' ?`<div class="last small levers-line"><span class="levers">${levers()}</span><button class="link" id="cancelMode">cancel</button></div>`
+      const hint = app.mode === 'settle' || app.mode === 'road' ?`<div class="last small levers-line"><span class="levers">${levers(false)}</span><button class="link" id="cancelMode">cancel</button></div>`
         : app.mode ? `<div class="last small">Tap a ${app.mode === 'road' ? 'glowing edge' : app.mode === 'city' ? 'ringed town' : 'glowing corner'} · <button class="link" id="cancelMode">cancel</button></div>`
         : extra ? `<div class="last small"><b>Extra build</b> ${why('extra')}</div>` : `<div class="last small muted">${esc(lastLine(c))}</div>`;
       // extra build step (5-6 players): no trading or cards, so the Trade slot stays empty
@@ -1010,6 +1027,7 @@ function settingsPanel() {
       <div class="set-row"><span class="grow">Red odds ${why('oddsAll')}</span><label class="switch"><input type="checkbox" id="oddsAllSw" ${S.oddsAll ? 'checked' : ''}><span></span></label></div>
       <div class="set-row"><span class="grow">Weighted ${why('weighted')}</span><label class="switch"><input type="checkbox" data-sw="weighted" ${S.weighted ? 'checked' : ''}><span></span></label></div>
       <div class="set-row"><span class="grow">Mine ${why('mine')}</span><label class="switch"><input type="checkbox" data-sw="mine" ${S.mine ? 'checked' : ''}><span></span></label></div>
+      <div class="set-row"><span class="grow">Advisor ${why('advisor')}</span><label class="switch"><input type="checkbox" data-sw="advisor" ${S.advisor ? 'checked' : ''}><span></span></label></div>
     </div>
     <div class="phase"><div class="head"><span class="h">House rules</span></div>
       <div class="set-row"><span class="grow">Friendly robber<span class="sub">Robber can't touch a player on 2 points or fewer.</span></span><label class="switch"><input type="checkbox" data-sw="friendly" ${S.friendly ? 'checked' : ''}><span></span></label></div>
@@ -1031,7 +1049,7 @@ function renderMain() {
   $('#playView').hidden = app.tab !== 'play';
   $('#trackerView').hidden = app.tab !== 'tracker';
   $('#settingsView').hidden = app.tab !== 'settings';
-  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=5'; return; }
+  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=6'; return; }
   if (app.tab === 'settings') { renderSettings(); return; }
   const c = current();
   const lobby = app.net && (app.net.status === 'lobby' || app.net.status === 'joining');

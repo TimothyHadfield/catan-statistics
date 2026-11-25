@@ -16,11 +16,12 @@
     <script src="js/engine.js?v=4"></script>
     <script src="js/tracker-board.js?v=4"></script>
     <script src="js/weights.js?v=3"></script>
+    <script src="js/advisor.js?v=1"></script>
     <script src="js/undo.js?v=1"></script>
     <script src="js/board-art.js?v=3"></script>
     <!-- same look as Online play: its colours, panels, buttons, switches and board art -->
     <link rel="stylesheet" href="css/table.css?v=1">
-    <link rel="stylesheet" href="css/style.css?v=12">
+    <link rel="stylesheet" href="css/style.css?v=13">
     <style>
         html, body { margin: 0; height: 100%; }
         body { overflow: hidden; -webkit-tap-highlight-color: transparent; background: #5a3820; }
@@ -48,6 +49,8 @@
         .ip .dots .dr { grid-template-columns: 34px repeat(6, 25px); }
         .ip .dots { font-size: 14px; } .ip .dots.wt { font-size: 12.5px; }
         .ip .dots .dw { gap: 8px; }
+        /* phone: the switches (up to Weighted, Mine, Advisor) wrap at the table's width instead of widening it */
+        @media (max-width: 1023px) { .ip .dots { width: min-content; } .ip .dots .dw { flex-wrap: wrap; row-gap: 4px; } }
         .ip .phase { padding: 6px 8px; }
         .pad .btn { padding: 0; gap: 0; flex-direction: column; line-height: 1; min-height: 0; }
         .pad .btn b { font-size: 20px; } .pad .btn small { font-size: 10px; color: var(--muted); margin-top: 2px; font-weight: 600; }
@@ -144,7 +147,14 @@ const [mine, setMine] = useState(saved ? saved.mine : false);
 // "Red odds" lives in the game's Settings tab (localStorage catan.settings, same site); off = summarized odds
 const readOddsAll = () => { try { return !!(JSON.parse(localStorage.getItem('catan.settings') || '{}').oddsAll); } catch (e) { return false; } };
 const [oddsAll, setOddsAll] = useState(readOddsAll);
-useEffect(() => { const f = () => setOddsAll(readOddsAll()); window.addEventListener('storage', f); window.addEventListener('focus', f); return () => { window.removeEventListener('storage', f); window.removeEventListener('focus', f); }; }, []);
+// "Advisor" is shared with Online play's setting of the same name (catan.settings.advisor)
+const readAdvisor = () => { try { return !!(JSON.parse(localStorage.getItem('catan.settings') || '{}').advisor); } catch (e) { return false; } };
+const [advisor, setAdvisor] = useState(readAdvisor);
+const toggleAdvisor = () => {
+const on = !advisor; setAdvisor(on);
+try { const s = JSON.parse(localStorage.getItem('catan.settings') || '{}'); s.advisor = on; localStorage.setItem('catan.settings', JSON.stringify(s)); } catch (e) {}
+};
+useEffect(() => { const f = () => { setOddsAll(readOddsAll()); setAdvisor(readAdvisor()); }; window.addEventListener('storage', f); window.addEventListener('focus', f); return () => { window.removeEventListener('storage', f); window.removeEventListener('focus', f); }; }, []);
 const [selectedHex, setSelectedHex] = useState(null);
 const [settlements, setSettlements] = useState(saved ? saved.settlements : []);
 const [roads, setRoads] = useState(saved ? saved.roads : []);
@@ -267,7 +277,7 @@ if (!vMap[key]) vMap[key] = {x: vx, y: vy, points: 0, adjacentHexes: []};
 if (hex.number && hex.resource && hex.resource !== 'desert') {
 const pips = getNumberProbability(parseInt(hex.number));
 vMap[key].points += pips;
-vMap[key].adjacentHexes.push({resource: hex.resource, pips});
+vMap[key].adjacentHexes.push({resource: hex.resource, pips, number: parseInt(hex.number)});
 }
 hVerts.push(key);
 }
@@ -305,6 +315,15 @@ return W.personal(own, open, boardTotals);
 }, [boardTotals, weighted, mine, settlements, vertices, blocked, selectedPlayer]);
 const wOf = r => (wts ? wts[r] : 1);
 const vertexValue = v => W.weightedSum(v.adjacentHexes, wts);
+// Advisor on: open corners show the selected colour's Advisor score instead (js/advisor.js)
+const advScore = useMemo(() => {
+if (!advisor || !isLocked || !window.CatanAdvisor) return null;
+const A = window.CatanAdvisor;
+const inp = A.fromTracker(vertices, neighbours, settlements, roads, boardTotals);
+const sc = A.scores(Object.assign(inp, {me: selectedPlayer})).score, out = {};
+inp.keys.forEach((k, i) => { if (sc[i] != null) out[k] = sc[i]; });
+return out;
+}, [advisor, isLocked, vertices, neighbours, settlements, roads, boardTotals, selectedPlayer]);
 
 const lockBoard = (hexesData) => {
 setSelectedHex(null); setAutoPlaceMode(false); setAutoPlaceStep(0);
@@ -542,7 +561,7 @@ return (
 ) : (() => {
 // whole numbers: decimals are unreadable this small. Same small badge as Online play (js/board-art.js),
 // no coloured ring (Tim 2026-11-24)
-const val = vertexValue(v), txt = String(Math.round(val)), long = txt.length > 2;
+const val = advScore && advScore[k] != null ? advScore[k] : vertexValue(v), txt = String(Math.round(val)), long = txt.length > 2;
 // summarized odds: red corners get a small soft dot instead of a number (Tim 2026-11-25)
 if (!ART.oddsShown(val, oddsAll)) return <circle cx={v.x} cy={v.y} r={0.11 * U} className="hl-dot" data-low=""/>;
 return (<>
@@ -646,6 +665,7 @@ const summary = isLocked && (
 <div className="dw">
 {lever('Weighted', weighted, () => setWeighted(!weighted), 'weighted')}
 {weighted && lever('Mine', mine, () => setMine(!mine), 'mine', 'Weights for the selected colour: what it still needs and what is left on open corners')}
+{lever('Advisor', advisor, toggleAdvisor, 'advisor', 'Corner scores for the selected colour: its value, new resources, and blocking opponents')}
 </div>
 <div className="dr dh"><span/>{RES_LIST.map(r => <span key={r} className="dc" title={r}><ResIcon r={r}/></span>)}<span className="dc lab">all</span></div>
 <div className="dr dt" data-row="table">

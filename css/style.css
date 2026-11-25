@@ -365,6 +365,9 @@ button.rc { font: inherit; padding: 0; cursor: pointer; }
 /* spot odds lever on the play screen while placing a town */
 .levers { display: inline-flex; align-items: center; gap: 10px; flex: none; }
 .levers-line { display: flex; align-items: center; gap: 10px; overflow: visible; min-height: 22px; }
+/* four levers (with Advisor) don't fit one line beside "Place a town": they wrap, the title stays whole */
+.head:has(.levers) .h { flex: 1 0 auto; }
+.head .levers { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; }
 @media (max-width: 360px) { .levers, .levers-line { gap: 8px; } .levers-line #cancelMode { display: none; } .odds-lever { gap: 4px; } }
 .odds-lever { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .switch.sm { display: inline-block; width: 34px; height: 20px; }
