@@ -20,18 +20,26 @@
     return w;
   }
 
-  // "Mine" (personal) weights, for one player. Same shape as weights(), but each resource's supply is
-  //   supply_r = open_r × (own_r + 3) / NEED_r
-  // open_r = dots of r on corners nobody can still build on removed (taken or next to a town);
-  // own_r = the player's own dots of r (towns; a city twice); NEED_r = one road + town + city + card.
-  // The +3 keeps a resource you get nothing of from blowing up. Then w_r = clamp(mean supply / supply_r, 0.5, 2),
-  // 2 when nothing of r is open. No open corners at all: open = the whole board.
-  const NEED = { wood: 2, brick: 2, sheep: 2, wheat: 4, ore: 4 };
+  // "Mine" (personal) weights, for one player (rewritten 2026-11-25: the first version let open-corner scarcity
+  // swamp what you already have; Tim had the most ore and ore showed 2x).
+  //   need_r  = NEED_r / 16          share of building that uses r (2 roads + town + city + card)
+  //   have_r  = (own_r + 2) / (T + 10) your share of r (own dots, city twice; T = all your dots; +2/+10 smooths)
+  //   nudge_r = clamp(sqrt(mean open / open_r), 0.7, 1.4)   scarce on corners still open -> a bit more
+  //   w_r = clamp(raw_r / mean raw, 0.5, 2), raw_r = need_r / have_r × nudge_r
+  // open_r = dots of r on corners nobody can still build on removed; none open at all -> whole board.
+  const NEED = { wood: 3, brick: 3, sheep: 2, wheat: 4, ore: 4 };
   function personal(own, open, board) {
-    const avail = RES.some(r => (open[r] || 0) > 0) ? open : board, sup = {};
-    RES.forEach(r => { sup[r] = (avail[r] || 0) * ((own[r] || 0) + 3) / NEED[r]; });
-    const have = RES.filter(r => sup[r] > 0), mean = have.reduce((a, r) => a + sup[r], 0) / (have.length || 1), w = {};
-    RES.forEach(r => { w[r] = sup[r] > 0 ? Math.min(2, Math.max(0.5, mean / sup[r])) : 2; });
+    const avail = RES.some(r => (open[r] || 0) > 0) ? open : board;
+    const T = RES.reduce((a, r) => a + (own[r] || 0), 0), nTot = RES.reduce((a, r) => a + NEED[r], 0);
+    const there = RES.filter(r => (avail[r] || 0) > 0), meanA = there.reduce((a, r) => a + avail[r], 0) / (there.length || 1);
+    const raw = {};
+    RES.forEach(r => {
+      const need = NEED[r] / nTot, have = ((own[r] || 0) + 2) / (T + 10);
+      const nudge = avail[r] > 0 ? Math.min(1.4, Math.max(0.7, Math.sqrt(meanA / avail[r]))) : 1;
+      raw[r] = need / have * nudge;
+    });
+    const mean = RES.reduce((a, r) => a + raw[r], 0) / 5, w = {};
+    RES.forEach(r => { w[r] = Math.min(2, Math.max(0.5, raw[r] / mean)); });
     return w;
   }
   // dots per resource over corners [{open, hexes: [{resource, pips}]}], open ones only

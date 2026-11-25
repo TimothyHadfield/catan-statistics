@@ -29,26 +29,31 @@ test('weights on a real random board: totals 58 pips, scarce resource weighs mor
   }
 });
 
-test('personal weights: need (build costs, minus what you already get) and what is still open', () => {
+test('personal weights: mostly what you already get vs what building needs; open corners only nudge', () => {
   const zero = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
   const even = { wood: 12, brick: 12, sheep: 12, wheat: 12, ore: 12 };
-  // nothing yet, everything equally open: wheat and ore (4 each in road+town+city+card) beat wood/brick/sheep (2)
+  const inRange = w => W.RES.forEach(r => assert.ok(w[r] >= 0.5 && w[r] <= 2, r + ' ' + w[r]));
+  // nothing yet, everything equally open: follows the need (2 roads + town + city + card)
   let w = W.personal(zero, even, even);
-  assert.ok(w.wheat > w.wood && near(w.wheat, w.ore) && near(w.wood, w.brick) && near(w.wood, w.sheep));
-  // supply = 12*3/NEED: wood 18, wheat 9; mean = (18*3 + 9*2)/5 = 14.4 -> wood 0.8, wheat 1.6
-  assert.ok(near(w.wood, 0.8) && near(w.wheat, 1.6));
-  // already getting lots of wheat: wheat drops below ore
-  w = W.personal({ ...zero, wheat: 9 }, even, even);
-  assert.ok(w.wheat < w.ore);
-  // little ore left on open corners: ore counts more than wheat
-  w = W.personal(zero, { ...even, ore: 3 }, even);
-  assert.ok(w.ore > w.wheat);
-  // no ore on any open corner: 2 (like a resource missing from the board)
-  w = W.personal(zero, { ...even, ore: 0 }, even);
-  assert.strictEqual(w.ore, 2);
+  assert.ok(near(w.wheat, w.ore) && near(w.wood, w.brick) && w.wheat > w.wood && w.wood > w.sheep);
+  inRange(w);
+  // Tim 2026-11-25: "I have much more probability points on rock than any other resource, but it says the
+  // weight for it is 2x" -- lots of ore already must make ore the LOWEST weight, even when little ore is open
+  const tim = { wood: 3, brick: 2, sheep: 0, wheat: 3, ore: 11 };
+  w = W.personal(tim, { wood: 20, brick: 14, sheep: 22, wheat: 18, ore: 4 }, even);
+  assert.ok(W.RES.every(r => r === 'ore' || w.ore < w[r]), JSON.stringify(w));
+  assert.ok(w.ore < 1);
+  assert.ok(w.sheep > w.wood); // getting no sheep at all: sheep is wanted
+  inRange(w);
+  // more of a resource always lowers its weight
+  let prev = Infinity;
+  for (const n of [0, 2, 4, 8, 12]) { const x = W.personal({ ...zero, wheat: n }, even, even).wheat; assert.ok(x <= prev); prev = x; } // floor 0.5
+  assert.ok(W.personal({ ...zero, wheat: 4 }, even, even).wheat < W.personal(zero, even, even).wheat);
+  // scarce on open corners: a small nudge up, never more than ~1.4x the plentiful case
+  const a = W.personal(zero, even, even), b = W.personal(zero, { ...even, ore: 3 }, even);
+  assert.ok(b.ore > a.ore && b.ore / a.ore < 1.45);
   // every corner taken: fall back to the whole board
   assert.deepStrictEqual(W.personal(zero, zero, even), W.personal(zero, even, even));
-  W.RES.forEach(r => assert.ok(w[r] >= 0.5 && w[r] <= 2));
 });
 
 test('openDots: dots per resource summed over open corners only', () => {

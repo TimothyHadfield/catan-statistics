@@ -97,7 +97,7 @@ const WHY = {
   game: ['How to play', 'Roll, collect from tiles next to your towns, build. Road = wood + brick. Town = wood, brick, sheep, wheat. City = 2 wheat + 3 ore. Card = sheep, wheat, ore. First to 10 points wins. A 7 moves the robber: anyone with more than 7 cards gives back half.'],
   odds: ['Spot odds', 'Numbers on open corners add up the dots of the tiles around them (a 6 or 8 is 5 dots, a 2 or 12 is 1). Each dot is one roll in 36, the same count as In-person play.'],
   weighted: ['Weighted', 'Corner numbers count a dot of a scarce resource for more and a common one for less. Each resource weighs (average dots per resource) ÷ (its dots on this board), between 0.5 and 2.'],
-  mine: ['Mine', 'With Weighted on, weights fit you instead of the whole board: a resource counts more when you get little of it, when building needs a lot of it (one road + town + city + card: wheat and ore 4 each, the rest 2), and when little of it is left on corners that are still open. Taken corners and corners next to a town don\'t count.'],
+  mine: ['Mine', 'With Weighted on, weights fit you: a resource counts more the less of it you already get compared with what building needs (2 roads + town + city + card: wheat and ore 4, wood and brick 3, sheep 2). Being scarce on corners still open only nudges it up a little.'],
   online: ['Online','Make a room with an "Online friend" seat, then friends type its code here. Seats nobody takes become computers.'],
   trade: ['Trading', 'Bank: 4 of one for 1. A 3:1 harbour or a 2:1 harbour of that kind is cheaper once you have a town on it. Offers to players: computers say yes when the deal helps them and you are not about to win.'],
   strong: ['How strong?', 'Measured in computer-only games in node; see Settings.'],
