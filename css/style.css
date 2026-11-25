@@ -166,6 +166,9 @@ body.at-table .board-wrap { max-height: calc(100dvh - var(--head) - var(--tabh) 
 .dfx-sum { font: 800 30px/1 system-ui, sans-serif; color: #fff; opacity: 0; transition: opacity .15s; font-variant-numeric: tabular-nums; min-width: 1.3em; text-align: center; }
 .dfx-sum.on { opacity: 1; }
 .dfx-sum.seven { color: #ff8a7a; }
+/* robber sat on the rolled number: a small "blocked" sign beside the sum and beside the panel dice */
+.dfx-sum .blk { width: .8em; height: .8em; margin-left: 6px; vertical-align: -.05em; }
+.dice .blk { width: 18px; height: 18px; align-self: center; flex: none; }
 @media (min-width: 900px) { .dfx-dice { gap: 16px; } .dfx-sum { font-size: 36px; } }
 .res-fly { position: fixed; width: 28px; height: 36px; border-radius: 5px; background: linear-gradient(160deg, color-mix(in srgb, var(--rc) 85%, #fff), var(--rc)); border: 2px solid #f3e7c9; box-shadow: 0 3px 8px rgba(0,0,0,.55); display: grid; place-items: center; z-index: 60; pointer-events: none; }
 .res-fly .ri { width: 20px; height: 20px; }

@@ -444,16 +444,17 @@ function fxStep(c) {
       FX.play('diceRoll');
       const t = e.d[0] + e.d[1];
       if (!slow) {
-        diceFx(e, false);
+        diceFx(e, false, robbed(g, t));
         if (t === 7) { setTimeout(() => FX.play('stamp'), 500); return; }
         setTimeout(() => flashNumber(t), 600);
         if (e.gain) setTimeout(() => showGains(g, c.seat, e.gain, t), 650);
         return;
       }
-      const land = diceFx(e, true);
+      const land = diceFx(e, true, robbed(g, t));
       app.fxUntil = Date.now() + land.ms + 700;
       land.done.then(() => {
         if (t === 7) { FX.play('stamp'); return; }
+        if (robbed(g, t)) markHex(g.robber);
         flashNumber(t);
         if (e.gain) { const n = flyGains(g, c.seat, e.gain, t); if (n) FX.play('cardDeal'); }
       });
@@ -488,7 +489,10 @@ const FLY_GAP = 130, FLY_MS = 950;
 // big dice tumbling beside the board, landing on the real roll, then fading; returns when they land.
 // They sit over the action panel (phone: below the board; laptop: top of the right column), never over
 // the tiles (Tim 2026-11-24: "make the dice rolling slightly off the board")
-function diceFx(e, slow) {
+// the roll hit the robber's tile and someone has a town there: they get nothing (Tim 2026-11-25: "show a little blocked sign with the roll")
+const robbed = (g, t) => t !== 7 && g.robber >= 0 && g.hexNum[g.robber] === t && G.hexVerts[g.robber].some(v => g.vOwner[v] >= 0);
+const BLOCK_SVG = '<svg viewBox="0 0 20 20" class="blk" aria-label="Blocked by the robber"><circle cx="10" cy="10" r="8" fill="#fff" stroke="#d33" stroke-width="3"/><path d="M4.6 15.4L15.4 4.6" stroke="#d33" stroke-width="3"/></svg>';
+function diceFx(e, slow, blocked) {
   const spot = $('#panel') && $('#panel').firstElementChild;
   if (!spot || app.tab !== 'play') return { ms: 0, done: Promise.resolve() };
   let box = $('#diceFx');
@@ -501,7 +505,7 @@ function diceFx(e, slow) {
   const top = Math.max(pr.top, sr.top), hgt = Math.max(innerWidth >= 900 ? 150 : 72, Math.min(sr.bottom, pr.bottom) - top);
   // room for a die tumbling corner-up (about 1.4x its size) inside the box
   box.style.cssText = `left:${sr.left}px;top:${top}px;width:${sr.width}px;height:${hgt}px;--die-size:${Math.round(Math.max(36, Math.min(84, (hgt - 16) / 1.5)))}px`;
-  box.innerHTML = `<div class="dfx-in" style="--pc:${colorOf(e.p)}"><div class="dfx-dice"><div class="tbl-die"></div><div class="tbl-die"></div></div><b class="dfx-sum${t === 7 ? ' seven' : ''}">${t}</b></div>`;
+  box.innerHTML = `<div class="dfx-in" style="--pc:${colorOf(e.p)}"><div class="dfx-dice"><div class="tbl-die"></div><div class="tbl-die"></div></div><b class="dfx-sum${t === 7 ? ' seven' : ''}">${t}${blocked ? BLOCK_SVG : ''}</b></div>`;
   box.hidden = false;
   const dice = box.querySelectorAll('.tbl-die'), sum = box.querySelector('.dfx-sum');
   TABLE.die(dice[0], 1 + Math.floor(Math.random() * 6)); TABLE.die(dice[1], 1 + Math.floor(Math.random() * 6));
@@ -676,7 +680,7 @@ function mineHTML(c) {
 // ------------------------------------------------------------ the action panel
 function diceHTML(g) {
   const d = g.dice || [g.lastDice ? g.lastDice[0] : 1, 1];
-  return `<div id="dice" class="dice${g.dice ? '' : ' idle'}"><div class="tbl-die" data-v="${d[0]}"></div><div class="tbl-die" data-v="${d[1]}"></div></div>`;
+  return `<div id="dice" class="dice${g.dice ? '' : ' idle'}"><div class="tbl-die" data-v="${d[0]}"></div><div class="tbl-die" data-v="${d[1]}"></div>${g.dice && robbed(g, d[0] + d[1]) ? BLOCK_SVG : ''}</div>`;
 }
 function lastLine(c) {
   const { g } = c;
@@ -1031,7 +1035,7 @@ function renderMain() {
   $('#playView').hidden = app.tab !== 'play';
   $('#trackerView').hidden = app.tab !== 'tracker';
   $('#settingsView').hidden = app.tab !== 'settings';
-  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=5'; return; }
+  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=6'; return; }
   if (app.tab === 'settings') { renderSettings(); return; }
   const c = current();
   const lobby = app.net && (app.net.status === 'lobby' || app.net.status === 'joining');
