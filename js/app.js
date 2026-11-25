@@ -147,12 +147,12 @@ function drawStatic(g) {
     // corner markers (spot odds) never cover it (pointing it from the board centre put it on one corner)
     let ox = ay - by, oy = bx - ax; const len = Math.hypot(ox, oy); ox /= len; oy /= len;
     if (ox * mx + oy * my < 0) { ox = -ox; oy = -oy; }
-    const tx = mx + ox * 0.66 * U, ty = my + oy * 0.66 * U;
+    const tx = mx + ox * 0.76 * U, ty = my + oy * 0.76 * U; // far enough out that the piers show between token and corners
     const r = RES.indexOf(p.type);
     h += `<g class="port"><path d="M${ax},${ay}L${tx},${ty}M${bx},${by}L${tx},${ty}" class="pier"/>
-      <circle cx="${tx}" cy="${ty}" r="${0.42 * U}" class="ptok" ${r >= 0 ? `style="stroke:${RES_COL[r]}"` : ''}/>
-      ${r >= 0 ? `<svg x="${tx - 0.17 * U}" y="${ty - 0.4 * U}" width="${0.34 * U}" height="${0.34 * U}" viewBox="0 0 20 20" aria-hidden="true">${RES_ICON[r]}</svg>` : ''}
-      <text x="${tx}" y="${ty + (r >= 0 ? 0.2 : 0.13) * U}" class="ptxt">${r >= 0 ? '2:1' : '3:1'}</text></g>`;
+      <circle cx="${tx}" cy="${ty}" r="${0.38 * U}" class="ptok" ${r >= 0 ? `style="stroke:${RES_COL[r]}"` : ''}/>
+      ${r >= 0 ? `<svg x="${tx - 0.15 * U}" y="${ty - 0.35 * U}" width="${0.3 * U}" height="${0.3 * U}" viewBox="0 0 20 20" aria-hidden="true">${RES_ICON[r]}</svg>` : ''}
+      <text x="${tx}" y="${ty + (r >= 0 ? 0.19 : 0.13) * U}" class="ptxt">${r >= 0 ? '2:1' : '3:1'}</text></g>`;
   });
   g.hexRes.forEach((r, i) => {
     const P = hexPts(i).map(q => q.map(x => x.toFixed(1)).join(',')).join(' ');
