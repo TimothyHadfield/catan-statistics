@@ -814,7 +814,7 @@ function startGame() {
   if (seats.includes('online')) { makeRoom(); return; }
   const nH = seats.filter((s, i) => i === 0 || s === 'human').length;
   const def = seats.map((s, i) => (i === 0 || s === 'human' ? { name: nH > 1 ? E.COLORS[i].name : (i === 0 ? 'You' : E.COLORS[i].name), kind: 'human', level: 'medium' } : { name: E.COLORS[i].name, kind: 'cpu', level: s }));
-  app.st = E.newGame(def, gameRules(), (Math.random() * 4294967296) >>> 0);
+  app.st = E.newGame(def, Object.assign(gameRules(), { first: Math.floor(Math.random() * n) }), (Math.random() * 4294967296) >>> 0); // random starter (Tim 2026-11-24)
   app.viewer = 0; app.coverFor = -1; app.mode = null; app.robHex = -1; app.logN = 0; app.freshGame = true;
   view.sig = ''; useGeo(app.st); setVB(Object.assign({}, FIT));
   FX.play('shuffle');

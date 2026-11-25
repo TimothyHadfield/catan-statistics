@@ -20,7 +20,8 @@
         if (s.kind === 'computer') return { name: E.COLORS[i].name, kind: 'cpu', level };
         return { name: String(s.name || E.COLORS[i].name).slice(0, 20), kind: 'human', level };
       });
-      return E.newGame(S, o.rules || {}, Math.floor(rng() * 4294967296) || 1);
+      const first = Math.floor(rng() * n); // random starter, like a real table
+      return E.newGame(S, Object.assign({}, o.rules || {}, { first }), Math.floor(rng() * 4294967296) || 1);
     },
     toAct(st) { return E.actors(st); },
     apply(st, seat, action) { return E.apply(st, seat, action); },

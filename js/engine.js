@@ -160,7 +160,9 @@
     const Gm = R.big ? BIG : G;
     const deck = []; for (const k in DEV) for (let i = 0; i < DEV[k] + (R.big ? DEV_BIG[k] : 0); i++) deck.push(k);
     shuffle(st, deck);
-    const order = []; for (let i = 0; i < n; i++) order.push(i); for (let i = n - 1; i >= 0; i--) order.push(i);
+    // rules.first = the seat that starts (the app picks it at random); snake order from it
+    const f = Number.isInteger(R.first) && R.first >= 0 && R.first < n ? R.first : 0;
+    const order = []; for (let i = 0; i < n; i++) order.push((f + i) % n); for (let i = n - 1; i >= 0; i--) order.push((f + i) % n);
     Object.assign(st, {
       rules: R, n,
       players: seats.map((s, i) => ({ name: s.name || COLORS[i].name, kind: s.kind || 'human', level: s.level || 'medium', color: COLORS[i].id,
@@ -354,7 +356,7 @@
     if (a.t !== 'road' || !(a.e >= 0 && a.e < geo(st).E.length) || st.eOwner[a.e] >= 0 || !geo(st).E[a.e].v.includes(st.lastV)) fail('Put the road next to your new town');
     st.eOwner[a.e] = p; st.sub = 'settle'; st.lastV = -1; st.step++;
     log(st, { k: 'road', p, e: a.e, setup: 1 });
-    if (st.step >= st.order.length) { st.phase = 'roll'; st.turn = 0; updateLongest(st); }
+    if (st.step >= st.order.length) { st.phase = 'roll'; st.turn = st.order[0]; updateLongest(st); }
     return st;
   }
 
