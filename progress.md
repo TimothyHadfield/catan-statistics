@@ -1,7 +1,7 @@
 # Catan: progress
 
 ## START HERE
-Last updated 2026-11-24, late (42/42 `node --test "tests/*.test.*"`; ui-check 4p + 6p, 5 sizes, no page scroll, no errors; live 75d0fc4). Versions now style.css v6, app.js v8. Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
+Last updated 2026-11-25 (48/48 `node --test "tests/*.test.*"`; live b4db8b7). Versions now style.css v13, app.js v18, board-art v3, engine v4, ai v3, tracker.html?v=6. In flight: branch `advisor` (Tim: an "Advisor" odds setting: personal weights + diversity + blocking opponents), worktree C:/Users/timha/AppData/Local/Temp/claude/wt/catan-advisor. Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
 
 ## Goal right now
 Catan is a playable base game vs computer, 3–6 players, with online rooms (friend codes, ON since 2026-10-27, Tim's go: "enable it to all games for now and we can disable it later if it becomes too much"). Wave 3 (2026-10-28, Tim: "Just make the games better") added 5–6 players, house-rule options and Learn videos.
@@ -44,6 +44,11 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 - See `CLAUDE.md` Traps (online cost, log `n` field, kit copies byte-identical).
 
 ## Decisions
+- 2026-11-25 (b4db8b7) Tim: "when a number is rolled that the robber is on that tile, show a little blocked sign with the roll". `robbed(g,t)` (roll ≠ 7, robber tile has that number and a town on it) → red circle-slash after the sum in the dice overlay and beside the panel dice; robber hex ringed at Normal speed. In-person has no robber, not changed.
+- 2026-11-25 (trade-once merge) Tim: "sometimes the AI try to offer the same trade twice in one turn". Cause: Hard computers make up to 2 offers/turn and rebuilt the refused one. Engine keeps `st.offered` (keys `E.offerKey(give,get)`, reset in nextTurn); AI skips offers already made. Engine does NOT reject human repeats. Test tests/trade-once.test.js (before: 199/800 repeats in 200 games; after 0). Win rates unchanged.
+- 2026-11-25 (9ab5924) Tim: end of game "instantly ends and zooms out really far ... slowed down and made the last play a little more dramatic ... doesn't cover the screen". Finale: table stays as is for 5 s (Fast 2.5 s, test 0): panel "X wins!" + last play + points, winning piece pulses, winner seat glows gold, small star burst at the seat (full-screen confetti dropped). Phone end screen keeps the in-game board height (was −330 px cap: 285→223) with one-line score rows. Measured WebKit 393 + 1280: board 285/285 phone, 627/627 laptop.
+- 2026-11-25 (9ab5924) Tim: "make the default setting a summarized odds version which shows only yellow or green odds, no red". `ART.oddsShown`: corners under 7 (rounded) get no number (setup: just the soft dot) unless Settings "Red odds" (`S.oddsAll`, default off). In-person reads the same setting from localStorage catan.settings (storage/focus events). Threshold 7 = my reading of "yellow" on the 3→12 red→green scale.
+- 2026-11-25 (7172ef9, tidy) Tim: "clean up the board ... odds circles smaller ... removing the red circle ... dice rolling slightly off the board ... fit it all in ... other player's details more clear ... next to the board ... table with past history [not] necessary". Badges r 0.21 hex, hairline; odds off = cream dots; laptop: opponents in a left column (tint + ring + glow for the turn), Dice/Quit under it, history box removed. Board height 656→627 (1280×720), 836→766 (1440×900). Not verified: 900–1023 px, online room, trade/robber at laptop size.
 - 2026-10-27 photo button removed (not fixed): it needed a paid Anthropic key.
 - 2026-10-27 beginner board uses the standard tile/number/harbour layout but no fixed starting towns.
 - 2026-10-27 player offers capped at 3 per turn; computers accept only fair-or-better trades and refuse near-winners.
