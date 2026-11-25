@@ -17,6 +17,16 @@ function started(n = 3, seed = 7, rules = { board: 'beginner' }) {
 // a vertex no town is near, with free edges
 function freeSpot(st) { return E.setupSpots(st).find(v => G.V[v].edges.every(e => st.eOwner[e] < 0)); }
 
+test('rules.first: that seat places first, snake order from it, and takes the first roll', () => {
+  const st = E.newGame(seats(4), { board: 'beginner', first: 2 }, 5);
+  assert.deepStrictEqual(st.order, [2, 3, 0, 1, 1, 0, 3, 2]);
+  assert.deepStrictEqual(E.actors(st), [2]);
+  const done = started(4, 5, { board: 'beginner', first: 2 });
+  assert.strictEqual(done.phase, 'roll'); assert.strictEqual(done.turn, 2); assert.deepStrictEqual(E.actors(done), [2]);
+  // bad values fall back to seat 0
+  assert.strictEqual(E.newGame(seats(3), { first: 7 }, 5).order[0], 0);
+});
+
 test('board: 19 tiles, 54 corners, 72 edges, 30 coast edges, 9 harbours that share no corner', () => {
   assert.strictEqual(E.HEXES.length, 19);
   assert.strictEqual(G.V.length, 54);
