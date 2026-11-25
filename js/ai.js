@@ -137,9 +137,12 @@
     const P = st.players[p], miss = plan.cost.map((c, r) => Math.max(0, c - P.res[r]));
     if (sum(miss) !== 1 || st.offers >= (lvl === 'hard' ? 2 : 1)) return null;
     const spare = P.res.map((c, r) => c - plan.cost[r]);
-    let g = -1; for (let r = 0; r < 5; r++) if (spare[r] > 0 && (g < 0 || spare[r] > spare[g])) g = r;
-    if (g < 0) return null;
-    const give = [0, 0, 0, 0, 0], get = [0, 0, 0, 0, 0]; give[g] = 1; get[miss.findIndex(x => x)] = 1;
+    // give my most spare card, but never an offer already made this turn (it was turned down or done)
+    const made = st.offered || [], want = miss.findIndex(x => x);
+    const gives = [0, 1, 2, 3, 4].filter(r => spare[r] > 0).sort((a, b) => spare[b] - spare[a] || a - b);
+    let give = null; const get = [0, 0, 0, 0, 0]; get[want] = 1;
+    for (const g of gives) { const t = [0, 0, 0, 0, 0]; t[g] = 1; if (!made.includes(E.offerKey(t, get))) { give = t; break; } }
+    if (!give) return null;
     // nobody can pay? don't bother
     if (!st.players.some((Q, i) => i !== p && (typeof Q.res === 'number' ? Q.res > 0 : sum(Q.res) > 0))) return null;
     return { t: 'offer', give, get };
