@@ -21,7 +21,8 @@
         return { name: String(s.name || E.COLORS[i].name).slice(0, 20), kind: 'human', level };
       });
       const first = Math.floor(rng() * n); // random starter, like a real table
-      return E.newGame(S, Object.assign({}, o.rules || {}, { first }), Math.floor(rng() * 4294967296) || 1);
+      // options.layout = the board the host saw before making the room (re-dealt with "Random board")
+      return E.newGame(S, Object.assign({}, o.rules || {}, { first }, o.layout ? { layout: o.layout } : {}), Math.floor(rng() * 4294967296) || 1);
     },
     toAct(st) { return E.actors(st); },
     apply(st, seat, action) { return E.apply(st, seat, action); },

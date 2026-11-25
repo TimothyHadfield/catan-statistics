@@ -155,9 +155,13 @@
     if (n >= 5) R.big = true; else delete R.big;
     if (R.big) R.maxTurns = Math.max(R.maxTurns, 900);
     // balanced applies to random boards (the beginner board is a fixed layout); 5-6 players are always random
-    const b = R.big || (R.balanced && R.board !== 'beginner') ? bigOrBalancedBoard(st, !!R.big, !!R.balanced)
-      : R.board === 'beginner' ? { res: BEGIN_RES.slice(), nums: BEGIN_NUM.slice(), ports: BEGIN_PORTS.slice() } : randomBoard(st);
     const Gm = R.big ? BIG : G;
+    // rules.layout = a board already dealt (the one shown before Start): used as-is, not kept in rules
+    const L = R.layout; delete R.layout;
+    const okL = L && Array.isArray(L.res) && Array.isArray(L.nums) && Array.isArray(L.ports) && L.res.length === Gm.HEXES.length && L.nums.length === Gm.HEXES.length && L.ports.length === Gm.portEdges.length;
+    const b = okL ? { res: L.res.slice(), nums: L.nums.slice(), ports: L.ports.slice() }
+      : R.big || (R.balanced && R.board !== 'beginner') ? bigOrBalancedBoard(st, !!R.big, !!R.balanced)
+      : R.board === 'beginner' ? { res: BEGIN_RES.slice(), nums: BEGIN_NUM.slice(), ports: BEGIN_PORTS.slice() } : randomBoard(st);
     const deck = []; for (const k in DEV) for (let i = 0; i < DEV[k] + (R.big ? DEV_BIG[k] : 0); i++) deck.push(k);
     shuffle(st, deck);
     // rules.first = the seat that starts (the app picks it at random); snake order from it

@@ -847,7 +847,7 @@ function newGamePanel() {
     <div class="seg" id="nPl" aria-label="Players">${[3, 4, 5, 6].map(k => `<button aria-pressed="${k === n}" data-n="${k}" aria-label="${k} players">${k}<span class="pl"> players</span></button>`).join('')}</div>
     <div style="margin-top:6px">${rows}</div>
     ${n >= 5 ? `<div class="small muted" style="margin-top:8px">Big board · extra build step after each turn ${why('big')}</div>`
-      : `<div class="seg" id="boardSeg" style="margin-top:8px" aria-label="Board">${[['random', S.balanced ? 'Balanced board' : 'Random board'], ['beginner', 'Beginner board']].map(([k, l]) => `<button aria-pressed="${S.board === k}" data-board="${k}">${l}</button>`).join('')}</div>`}
+      : `<div class="seg" id="boardSeg" style="margin-top:8px" aria-label="Board">${[['random', S.balanced ? 'Balanced board' : 'Random board'], ['beginner', 'Beginner board']].map(([k, l]) => `<button aria-pressed="${S.board === k}" data-board="${k}"${k === 'random' && S.board === k ? ' aria-label="Deal a new random board"' : ''}>${l}${k === 'random' && S.board === k ? ' <span class="reroll" aria-hidden="true">↻</span>' : ''}</button>`).join('')}</div>`}
     ${houseLine() ? `<div class="small muted" style="margin-top:6px">House rules: ${houseLine()} · <button class="link" data-tab-go="settings">change</button></div>` : ''}
   </div>${ONLINE ? `
   <div class="phase" style="margin-top:10px">
@@ -874,7 +874,8 @@ function startGame() {
   if (seats.includes('online')) { makeRoom(); return; }
   const nH = seats.filter((s, i) => i === 0 || s === 'human').length;
   const def = seats.map((s, i) => (i === 0 || s === 'human' ? { name: nH > 1 ? E.COLORS[i].name : (i === 0 ? 'You' : E.COLORS[i].name), kind: 'human', level: 'medium' } : { name: E.COLORS[i].name, kind: 'cpu', level: s }));
-  app.st = E.newGame(def, Object.assign(gameRules(), { first: Math.floor(Math.random() * n) }), (Math.random() * 4294967296) >>> 0); // random starter (Tim 2026-11-24)
+  app.st = E.newGame(def, Object.assign(gameRules(), { first: Math.floor(Math.random() * n), layout: shownLayout() }), newBoardSeed()); // random starter (Tim 2026-11-24); the board shown before Start
+  app.boardSeed = newBoardSeed();
   app.viewer = 0; app.coverFor = -1; app.mode = null; app.robHex = -1; app.logN = 0; app.freshGame = true; app.finale = null;
   view.sig = ''; useGeo(app.st); setVB(Object.assign({}, FIT));
   FX.play('shuffle');
@@ -887,7 +888,7 @@ async function makeRoom() {
   const n = S.n, seats = S.seats.slice(0, n);
   const kinds = seats.map((s, i) => (i === 0 ? 'human' : ['easy', 'medium', 'hard'].includes(s) ? 'computer' : 'empty'));
   app.netBusy = true; render();
-  const r = await window.CatanNet.createRoom({ name: netName(), seats: kinds, options: { rules: gameRules(), levels: seats.map(s => (['easy', 'medium', 'hard'].includes(s) ? s : 'medium')) } });
+  const r = await window.CatanNet.createRoom({ name: netName(), seats: kinds, options: { rules: gameRules(), layout: shownLayout(), levels: seats.map(s => (['easy', 'medium', 'hard'].includes(s) ? s : 'medium')) } });
   app.netBusy = false;
   if (!r.ok) { toast(r.message); render(); }
 }
@@ -1103,9 +1104,15 @@ function renderMain() {
   fxStep(c); // after the panel and seats are drawn: the dice sit over the new panel, cards fly to the new seats
 }
 let demoCache = null;
-function demoBoard() { // shown behind the new-game panel: the beginner board, or a big board for 5-6 players
-  const big = S.n >= 5;
-  if (!demoCache || !!demoCache.rules.big !== big) demoCache = E.newGame(Array.from({ length: big ? 5 : 3 }, () => ({})), { board: 'beginner' }, 1);
+// shown behind the new-game panel: the exact board Start will deal (same seed), so a random board can be
+// looked at and re-dealt by tapping "Random board" again (Tim 2026-11-25: "be able to be clicked again to
+// randomize the board again easily if you don't like the current setup")
+const newBoardSeed = () => ((Math.random() * 4294967296) >>> 0) || 1;
+app.boardSeed = newBoardSeed();
+const shownLayout = () => { const d = demoBoard(); return { res: d.hexRes.slice(), nums: d.hexNum.slice(), ports: d.ports.map(p => p.type) }; };
+function demoBoard() {
+  const r = gameRules(), key = [app.boardSeed, S.n >= 5, r.board, r.balanced].join();
+  if (!demoCache || demoCache.key !== key) { demoCache = E.newGame(Array.from({ length: S.n >= 5 ? 5 : 3 }, () => ({})), r, app.boardSeed); demoCache.key = key; }
   return demoCache;
 }
 function renderSettings() {
@@ -1121,7 +1128,7 @@ function bindPanel() {
   const on = (sel, f) => document.querySelectorAll(sel).forEach(b => b.addEventListener('click', e => f(b, e)));
   on('#nPl [data-n]', b => { S.n = +b.dataset.n; saveSettings(); render(); });
   on('[data-tab-go]', b => goTab(b.dataset.tabGo, true));
-  on('#boardSeg [data-board]', b => { S.board = b.dataset.board; saveSettings(); render(); });
+  on('#boardSeg [data-board]', b => { if (b.dataset.board === 'random' && S.board === 'random') { app.boardSeed = newBoardSeed(); FX.play('shuffle'); } S.board = b.dataset.board; saveSettings(); render(); });
   document.querySelectorAll('[data-seat]').forEach(sel => sel.addEventListener('change', () => { S.seats[+sel.dataset.seat] = sel.value; saveSettings(); render(); }));
   document.querySelectorAll('[data-lever]').forEach(sw => sw.addEventListener('change', () => setSetting(sw.dataset.lever, sw.checked)));
   on('#startBtn', startGame);
