@@ -17,10 +17,10 @@
     <script src="js/tracker-board.js?v=4"></script>
     <script src="js/weights.js?v=3"></script>
     <script src="js/undo.js?v=1"></script>
-    <script src="js/board-art.js?v=2"></script>
+    <script src="js/board-art.js?v=3"></script>
     <!-- same look as Online play: its colours, panels, buttons, switches and board art -->
     <link rel="stylesheet" href="css/table.css?v=1">
-    <link rel="stylesheet" href="css/style.css?v=11">
+    <link rel="stylesheet" href="css/style.css?v=12">
     <style>
         html, body { margin: 0; height: 100%; }
         body { overflow: hidden; -webkit-tap-highlight-color: transparent; background: #5a3820; }
@@ -141,6 +141,10 @@ const [history, setHistory] = useState(saved ? saved.history : []);
 const [hexes, setHexes] = useState(saved ? saved.hexes : getDefaultHexes());
 const [weighted, setWeighted] = useState(saved ? saved.weighted : false);
 const [mine, setMine] = useState(saved ? saved.mine : false);
+// "Red odds" lives in the game's Settings tab (localStorage catan.settings, same site); off = summarized odds
+const readOddsAll = () => { try { return !!(JSON.parse(localStorage.getItem('catan.settings') || '{}').oddsAll); } catch (e) { return false; } };
+const [oddsAll, setOddsAll] = useState(readOddsAll);
+useEffect(() => { const f = () => setOddsAll(readOddsAll()); window.addEventListener('storage', f); window.addEventListener('focus', f); return () => { window.removeEventListener('storage', f); window.removeEventListener('focus', f); }; }, []);
 const [selectedHex, setSelectedHex] = useState(null);
 const [settlements, setSettlements] = useState(saved ? saved.settlements : []);
 const [roads, setRoads] = useState(saved ? saved.roads : []);
@@ -539,6 +543,8 @@ return (
 // whole numbers: decimals are unreadable this small. Same small badge as Online play (js/board-art.js),
 // no coloured ring (Tim 2026-11-24)
 const val = vertexValue(v), txt = String(Math.round(val)), long = txt.length > 2;
+// summarized odds: red corners get a small soft dot instead of a number (Tim 2026-11-25)
+if (!ART.oddsShown(val, oddsAll)) return <circle cx={v.x} cy={v.y} r={0.11 * U} className="hl-dot" data-low=""/>;
 return (<>
 <circle cx={v.x} cy={v.y} r={ART.ODDS.r * U} className="hl-c" style={{fill: ART.oddsFill(val)}}/>
 <text x={v.x} y={v.y + (long ? ART.ODDS.tyLong : ART.ODDS.ty) * U} className={`hl-t${long ? ' long' : ''}`} data-sum="">{txt}</text>

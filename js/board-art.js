@@ -33,5 +33,10 @@
     const txt = String(odds), long = txt.length > 2;
     return `<circle cx="${x}" cy="${y}" r="${ODDS.r * U}" class="hl-c" style="fill:${oddsFill(odds)}"/><text x="${x}" y="${y + (long ? ODDS.tyLong : ODDS.ty) * U}" class="hl-t${long ? ' long' : ''}">${txt}</text>`;
   };
-  root.CatanArt = { RES_COL, RES_ICON, DEFS, patterns, houseD, oddsFill, ODDS, oddsBadge };
+  // summarized odds (the default): only yellow and green corners get a number; red ones (under 7 dots,
+  // as shown rounded) are hidden. Tim 2026-11-25: "shows only yellow or green odds, no red, because you'd
+  // never go there anyways". all = the "Red odds" setting.
+  const ODDS_MIN = 7;
+  const oddsShown = (odds, all) => !!all || Math.round(odds) >= ODDS_MIN;
+  root.CatanArt = { RES_COL, RES_ICON, DEFS, patterns, houseD, oddsFill, ODDS, oddsBadge, ODDS_MIN, oddsShown };
 })(typeof window !== 'undefined' ? window : globalThis);

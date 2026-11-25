@@ -17,7 +17,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} },
 };
-const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, weighted: false, mine: false, netName: '',
+const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, oddsAll: false, weighted: false, mine: false, netName: '',
   friendly: false, balanced: false, vp: 10 }, store.get('catan.settings', {}));
 while (S.seats.length < 6) S.seats.push('medium');
 if (![3, 4, 5, 6].includes(S.n)) S.n = 4;
@@ -95,6 +95,7 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = fal
 const why = key => `<button class="q" data-why="${key}" aria-label="Why?">?</button>`;
 const WHY = {
   game: ['How to play', 'Roll, collect from tiles next to your towns, build. Road = wood + brick. Town = wood, brick, sheep, wheat. City = 2 wheat + 3 ore. Card = sheep, wheat, ore. First to 10 points wins. A 7 moves the robber: anyone with more than 7 cards gives back half.'],
+  oddsAll: ['Red odds', 'Off: corners under 7 dots show no number, since they are rarely worth a town. On: every open corner shows its number. Applies to In-person play too.'],
   odds: ['Spot odds', 'Numbers on open corners add up the dots of the tiles around them (a 6 or 8 is 5 dots, a 2 or 12 is 1). Each dot is one roll in 36, the same count as In-person play.'],
   weighted: ['Weighted', 'Corner numbers count a dot of a scarce resource for more and a common one for less. Each resource weighs (average dots per resource) ÷ (its dots on this board), between 0.5 and 2.'],
   mine: ['Mine', 'With Weighted on, weights fit you: a resource counts more the less of it you already get compared with what building needs (2 roads + town + city + card: wheat and ore 4, wood and brick 3, sheep 2). Being scarce on corners still open only nudges it up a little.'],
@@ -201,6 +202,7 @@ function drawLive(c) {
   if (S.spotOdds && hl.kind !== 'settle') g.vOwner.forEach((o, v) => {
     if (!openCorner(g, v)) return;
     const [x, y] = pt(v), odds = spotPips(g, v, wNow);
+    if (!ART.oddsShown(odds, S.oddsAll)) return; // summarized: red corners hidden (Tim 2026-11-25)
     h += `<g class="odds-p">${ART.oddsBadge(x, y, U, odds)}</g>`;
   });
   hl.hexes.forEach(i => { const P = hexPts(i).map(q => q.join(',')).join(' '); h += `<polygon points="${P}" class="hl-hex" data-h="${i}"/>`; });
@@ -212,7 +214,8 @@ function drawLive(c) {
     const [x, y] = pt(v);
     // a number only where a town may really go: empty corner, no building one road away
     // Odds off: a small soft dot marks the spot instead of an empty white circle; the tap circle stays full size
-    const odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotPips(g, v, wNow) : '';
+    let odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotPips(g, v, wNow) : '';
+    if (odds !== '' && !ART.oddsShown(odds, S.oddsAll)) odds = ''; // red corners: just the dot
     h += `<g class="hl-v" data-v="${v}">${odds !== '' ? ART.oddsBadge(x, y, U, odds) : `<circle cx="${x}" cy="${y}" r="${0.11 * U}" class="hl-dot"/>`}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
   });
   hl.cities.forEach(v => { const [x, y] = pt(v); h += `<g class="hl-v" data-v="${v}"><circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hl-city"/><circle cx="${x}" cy="${y}" r="${0.45 * U}" class="hit"/></g>`; });
@@ -468,8 +471,14 @@ function fxStep(c) {
     else if (e.k === 'longest' && e.p >= 0) { FX.play('ding'); toast(`${nm(g, e.p)} take${e.p === c.seat ? '' : 's'} Longest Road`); }
     else if (e.k === 'army') { FX.play('ding'); toast(`${nm(g, e.p)} take${e.p === c.seat ? '' : 's'} Largest Army`); }
     else if (e.k === 'win') {
-      const mine = e.p === c.seat;
-      setTimeout(() => FX.celebrate({ kind: mine ? 'win' : 'lose', colors: [colorOf(e.p), '#f5d76e', '#fff'] }), 400);
+      // the winning piece glows for the whole finale and a small burst comes off the winner's seat
+      // (no full-screen confetti: Tim 2026-11-25 "it doesn't cover the screen or anything")
+      const mine = e.p === c.seat, piece = newer.filter(x => x.p === e.p && (x.k === 'settle' || x.k === 'city' || x.k === 'road')).pop();
+      const ms = S.speed === 'fast' ? FINALE_FAST : FINALE_MS;
+      if (piece) markPiece(piece, ms);
+      FX.play(mine ? 'win' : 'lose', { cat: 'celebrations' });
+      const at = mine ? $('#mine') : document.querySelector(`.opp[data-p="${e.p}"]`);
+      if (at) setTimeout(() => FX.celebrate({ kind: 'big', at, colors: [colorOf(e.p), '#f5d76e', '#fff'] }), 350);
     } else if (e.k === 'end' && g.turn === c.seat && g.players[c.seat].kind !== 'cpu') FX.play('turn');
   });
 }
@@ -557,19 +566,19 @@ function fxLayer() {
   if (!l) { $('#board').insertAdjacentHTML('beforeend', '<g id="fxg" style="pointer-events:none"></g>'); l = $('#fxg'); }
   return l;
 }
-function addMark(svg) {
+function addMark(svg, ms) {
   const l = fxLayer(), id = 'm' + Math.random().toString(36).slice(2);
-  l.insertAdjacentHTML('beforeend', `<g class="fx-mark" id="${id}">${svg}</g>`);
-  setTimeout(() => { const m = document.getElementById(id); if (m) m.remove(); }, 1300);
+  l.insertAdjacentHTML('beforeend', `<g class="fx-mark${ms ? ' long' : ''}" id="${id}">${svg}</g>`);
+  setTimeout(() => { const m = document.getElementById(id); if (m) m.remove(); }, ms || 1300);
 }
-function markPiece(e) {
+function markPiece(e, ms) {
   const col = colorOf(e.p);
   if (e.k === 'road') {
     const [a, b] = G.E[e.e].v, [ax, ay] = pt(a), [bx, by] = pt(b);
-    addMark(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="mk-glow"/><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="mk-line" style="stroke:${col}"/>`);
+    addMark(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="mk-glow"/><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="mk-line" style="stroke:${col}"/>`, ms);
   } else {
     const [x, y] = pt(e.v);
-    addMark(`<circle cx="${x}" cy="${y}" r="${0.62 * U}" class="mk-glow"/><circle cx="${x}" cy="${y}" r="${0.62 * U}" class="mk-ring" style="stroke:${col}"/>`);
+    addMark(`<circle cx="${x}" cy="${y}" r="${0.62 * U}" class="mk-glow"/><circle cx="${x}" cy="${y}" r="${0.62 * U}" class="mk-ring" style="stroke:${col}"/>`, ms);
   }
 }
 function markHex(h) {
@@ -632,7 +641,8 @@ function seatsHTML(c) {
     const away = app.net && app.net.seats && app.net.seats[i] && app.net.seats[i].kind === 'human' && !app.net.seats[i].online;
     // phone: one compact card per player in the top row; laptop: the same card, bigger, in a column
     // beside the board with small labels under each number (CSS shows the labels only there)
-    return `<div class="opp${on ? ' on' : ''}" data-p="${i}" style="--pc:${colorOf(i)}">
+    const won = g.phase === 'over' && g.winner === i && document.body.classList.contains('finale');
+    return `<div class="opp${on ? ' on' : ''}${won ? ' won' : ''}" data-p="${i}" style="--pc:${colorOf(i)}">
       <div class="opp-n"><i class="pc"></i><span class="nm">${esc(P.name)}</span>${P.kind === 'cpu' ? `<span class="lv">${P.level[0].toUpperCase()}</span>` : ''}${away ? '<span class="lv">away</span>' : ''}</div>
       <div class="opp-s"><span class="st pts" title="Points"><b class="vp">${vpOf(g, i, false)}</b><small>points</small></span><span title="Cards" class="st ct"><span class="sv"><i class="ic-card"></i><b>${P.res}</b></span><small>cards</small></span><span title="Development cards" class="st ct"><span class="sv"><i class="ic-dev"></i><b>${P.dev}</b></span><small>dev</small></span><span title="Knights played" class="st ct kn${P.knights ? '' : ' none'}"><span class="sv">⚔<b>${P.knights}</b></span><small>knights</small></span>${lr ? '<span class="aw" title="Longest Road"><span class="ab">LR</span><span class="af">Longest road</span></span>' : ''}${la ? '<span class="aw" title="Largest Army"><span class="ab">LA</span><span class="af">Largest army</span></span>' : ''}</div>
     </div>`;
@@ -705,6 +715,15 @@ const lever = (key, label) => `<label class="odds-lever">${label}<span class="sw
 // "Mine" shows only while Weighted is on
 const wLevers = () => `${lever('weighted', 'Weighted')}${S.weighted ? lever('mine', 'Mine') : ''}`;
 const levers = () => `${lever('spotOdds', 'Odds')}${wLevers()}`;
+// the few seconds between the winning play and the end screen: the table stays as it was
+const FINALE_MS = 5000, FINALE_FAST = 2500;
+function finaleHTML(c) {
+  const { g, seat } = c, w = g.winner;
+  let last = '';
+  for (let i = g.log.length - 1; i >= 0 && !last; i--) { const e = g.log[i]; if (e.k !== 'win' && e.p === w) last = describe(g, e, seat); }
+  const vp = E.publicVP(g, w) + (g.players[w].vpCards || 0);
+  return `<div class="phase finale" style="--pc:${colorOf(w)}"><div class="h">${w === seat ? 'You win!' : esc(g.players[w].name) + ' wins!'}</div><div class="small">${esc(last)}${last ? ' · ' : ''}<b>${vp} points</b></div></div>`;
+}
 function panelHTML(c) {
   const { g, seat } = c, P = g.players[seat], mineTurn = c.toAct.includes(seat) && app.coverFor < 0;
   const head = (t, extra) => `<div class="head"><span class="h">${t}</span>${extra || ''}</div>`;
@@ -716,7 +735,7 @@ function panelHTML(c) {
       return [t && `${t} town${t > 1 ? 's' : ''}`, ci && `${ci} cit${ci > 1 ? 'ies' : 'y'} (${ci * 2})`, g.longest.p === i && 'Longest road (2)', g.army.p === i && 'Largest army (2)', g.players[i].vpCards && `${g.players[i].vpCards} point card${g.players[i].vpCards > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
     };
     const rows = g.players.map((Q, i) => ({ i, vp: E.publicVP(g, i) + (Q.vpCards || 0) })).sort((a, b) => b.vp - a.vp)
-      .map(x => `<div class="seat"><i style="background:${colorOf(x.i)}"></i><span class="grow">${esc(g.players[x.i].name)}${x.i === w ? ' · winner' : ''}<span class="small muted bd">${parts(x.i)}</span></span><b class="num">${x.vp}</b></div>`).join('');
+      .map(x => `<div class="seat endrow"><i style="background:${colorOf(x.i)}"></i><span class="grow">${esc(g.players[x.i].name)}${x.i === w ? ' · winner' : ''}<span class="small muted bd">${parts(x.i)}</span></span><b class="num">${x.vp}</b></div>`).join('');
     return `<div class="phase">${head(w === seat ? 'You win!' : esc(g.players[w].name) + ' wins', `<button class="btn primary sm" id="againBtn">New game</button>`)}${rows}
       <button class="btn sm block" id="diceBtn" style="margin-top:8px">Dice this game</button></div>`;
   }
@@ -824,7 +843,7 @@ function startGame() {
   const nH = seats.filter((s, i) => i === 0 || s === 'human').length;
   const def = seats.map((s, i) => (i === 0 || s === 'human' ? { name: nH > 1 ? E.COLORS[i].name : (i === 0 ? 'You' : E.COLORS[i].name), kind: 'human', level: 'medium' } : { name: E.COLORS[i].name, kind: 'cpu', level: s }));
   app.st = E.newGame(def, Object.assign(gameRules(), { first: Math.floor(Math.random() * n) }), (Math.random() * 4294967296) >>> 0); // random starter (Tim 2026-11-24)
-  app.viewer = 0; app.coverFor = -1; app.mode = null; app.robHex = -1; app.logN = 0; app.freshGame = true;
+  app.viewer = 0; app.coverFor = -1; app.mode = null; app.robHex = -1; app.logN = 0; app.freshGame = true; app.finale = null;
   view.sig = ''; useGeo(app.st); setVB(Object.assign({}, FIT));
   FX.play('shuffle');
   changed();
@@ -988,6 +1007,7 @@ function settingsPanel() {
     <div class="phase"><div class="head"><span class="h">Game</span></div>
       <div class="set-row"><span class="grow">Computer speed</span>${seg('speed', [['normal', 'Normal'], ['fast', 'Fast']])}</div>
       <div class="set-row"><span class="grow">Spot odds ${why('odds')}</span><label class="switch"><input type="checkbox" id="oddsSw" ${S.spotOdds ? 'checked' : ''}><span></span></label></div>
+      <div class="set-row"><span class="grow">Red odds ${why('oddsAll')}</span><label class="switch"><input type="checkbox" id="oddsAllSw" ${S.oddsAll ? 'checked' : ''}><span></span></label></div>
       <div class="set-row"><span class="grow">Weighted ${why('weighted')}</span><label class="switch"><input type="checkbox" data-sw="weighted" ${S.weighted ? 'checked' : ''}><span></span></label></div>
       <div class="set-row"><span class="grow">Mine ${why('mine')}</span><label class="switch"><input type="checkbox" data-sw="mine" ${S.mine ? 'checked' : ''}><span></span></label></div>
     </div>
@@ -1011,12 +1031,23 @@ function renderMain() {
   $('#playView').hidden = app.tab !== 'play';
   $('#trackerView').hidden = app.tab !== 'tracker';
   $('#settingsView').hidden = app.tab !== 'settings';
-  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=3'; return; }
+  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=4'; return; }
   if (app.tab === 'settings') { renderSettings(); return; }
   const c = current();
   const lobby = app.net && (app.net.status === 'lobby' || app.net.status === 'joining');
   document.body.classList.toggle('at-table', !!c && !lobby);
-  document.body.classList.toggle('game-over', !!c && !lobby && c.g.phase === 'over');
+  // the winning play stays on the normal table for a few seconds before the end screen
+  // (Tim 2026-11-25: "it instantly ends and zooms out really far ... slowed down and made the last play a little more dramatic")
+  const over = !!c && !lobby && c.g.phase === 'over';
+  const winE = over && app.logN > 0 && c.g.log.find(e => e.k === 'win' && e.n > app.logN);
+  if (winE && S.speed !== 'test') {
+    const ms = S.speed === 'fast' ? FINALE_FAST : FINALE_MS;
+    app.finale = { p: winE.p, until: Date.now() + ms };
+    clearTimeout(app.finaleTimer); app.finaleTimer = setTimeout(() => { if (app.tab === 'play') render(); }, ms + 20);
+  }
+  const ending = over && app.finale && app.finale.p === c.g.winner && Date.now() < app.finale.until;
+  document.body.classList.toggle('game-over', over && !ending);
+  document.body.classList.toggle('finale', !!ending);
   if (!c || lobby) {
     const demo = demoBoard();
     useGeo(demo); drawStatic(demo); $('#live').innerHTML = '';
@@ -1028,12 +1059,13 @@ function renderMain() {
   const dl = $('#diceLive'); if (dl && !$('#sheet').hidden) dl.innerHTML = diceLiveHTML(c);
   drawLive(c);
   $('#seats').hidden = false; $('#seats').innerHTML = seatsHTML(c); $('#seats').classList.toggle('many', c.g.n >= 5);
-  const noHand = app.coverFor >= 0 || c.g.phase === 'over'; // the end screen needs the room for the scores
+  const noHand = app.coverFor >= 0 || (over && !ending); // the end screen needs the room for the scores
   $('#mine').hidden = noHand; $('#mine').innerHTML = noHand ? '' : mineHTML(c);
-  $('#panel').innerHTML = app.coverFor >= 0 ? `<div class="phase cover"><div class="h">Pass to ${esc(c.g.players[app.coverFor].name)}</div><button class="btn primary block" id="readyBtn" style="margin-top:10px">I'm ${esc(c.g.players[app.coverFor].name)}</button></div>` : panelHTML(c);
+  $('#mine').classList.toggle('won', !!ending && c.g.winner === c.seat);
+  $('#panel').innerHTML = app.coverFor >= 0 ? `<div class="phase cover"><div class="h">Pass to ${esc(c.g.players[app.coverFor].name)}</div><button class="btn primary block" id="readyBtn" style="margin-top:10px">I'm ${esc(c.g.players[app.coverFor].name)}</button></div>` : ending ? finaleHTML(c) : panelHTML(c);
   if (app.coverFor < 0) $('#panel').insertAdjacentHTML('beforeend', sideHTML(c));
-  if (c.online) $('#panel').insertAdjacentHTML('beforeend', `<div class="row netbar small muted"><button class="btn sm ghost" id="diceBtn">Dice</button><span class="grow">Room ${esc(app.net.code)}</span><button class="btn sm ghost" id="leaveBtn">Leave</button></div>`);
-  else if (c.g.phase !== 'over') $('#panel').insertAdjacentHTML('beforeend', `<div class="row netbar small muted"><button class="btn sm ghost" id="diceBtn">Dice</button><span class="grow"></span><button class="btn sm ghost" id="quitBtn">Quit game</button></div>`);
+  if (c.online && !ending) $('#panel').insertAdjacentHTML('beforeend', `<div class="row netbar small muted"><button class="btn sm ghost" id="diceBtn">Dice</button><span class="grow">Room ${esc(app.net.code)}</span><button class="btn sm ghost" id="leaveBtn">Leave</button></div>`);
+  else if (!over) $('#panel').insertAdjacentHTML('beforeend', `<div class="row netbar small muted"><button class="btn sm ghost" id="diceBtn">Dice</button><span class="grow"></span><button class="btn sm ghost" id="quitBtn">Quit game</button></div>`);
   document.querySelectorAll('#dice .tbl-die').forEach(d => TABLE.die(d, +d.dataset.v));
   bindPanel();
   fxStep(c); // after the panel and seats are drawn: the dice sit over the new panel, cards fly to the new seats
@@ -1049,6 +1081,7 @@ function renderSettings() {
   FX.renderSettings($('#fxSet'));
   document.querySelectorAll('[data-set] [data-v]').forEach(b => b.addEventListener('click', () => setSetting(b.closest('[data-set]').dataset.set, b.dataset.v)));
   $('#oddsSw').addEventListener('change', e => setSetting('spotOdds', e.target.checked));
+  $('#oddsAllSw').addEventListener('change', e => setSetting('oddsAll', e.target.checked));
   document.querySelectorAll('[data-sw]').forEach(sw => sw.addEventListener('change', () => setSetting(sw.dataset.sw, sw.checked)));
   $('#vpSel').addEventListener('change', e => setSetting('vp', +e.target.value));
 }
