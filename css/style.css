@@ -81,7 +81,10 @@ body.at-table.game-over .board-wrap { max-height: calc(100dvh - var(--head) - va
 /* ---------- board art ---------- */
 #board .frame { fill: #6b4a2b; stroke: #3a2614; stroke-width: 10; stroke-linejoin: round; filter: drop-shadow(0 6px 8px rgba(0,0,0,.55)); }
 #board .hedge { stroke: #e9dcb4; stroke-width: 2.2; stroke-linejoin: round; }
-#board .pier { stroke: #8a6a42; stroke-width: 3.2; stroke-linecap: round; }
+/* piers: light planks with a dark edge so they stand out on the sea (Tim: "hard to see") */
+#board .pier { stroke: #f3e7c9; stroke-width: 5.5; stroke-linecap: round; paint-order: stroke; filter: drop-shadow(0 0 1px #3a2614) drop-shadow(0 0 0.6px #3a2614); }
+/* harbour icons get a dark outline so light sheep / wheat show on the cream token */
+#board .port svg * { stroke: #3a2614; stroke-width: 1.3px; paint-order: stroke; stroke-linejoin: round; }
 #board .ptok { fill: #f3e7c9; stroke: #6b4a2b; stroke-width: 2.4; }
 #board .ptxt { font: 800 13.5px system-ui, sans-serif; fill: #3a2614; text-anchor: middle; }
 #board .tokc { fill: #f3e7c9; stroke: #9b8457; stroke-width: 1.4; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }

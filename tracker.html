@@ -20,7 +20,7 @@
     <script src="js/board-art.js?v=1"></script>
     <!-- same look as Online play: its colours, panels, buttons, switches and board art -->
     <link rel="stylesheet" href="css/table.css?v=1">
-    <link rel="stylesheet" href="css/style.css?v=8">
+    <link rel="stylesheet" href="css/style.css?v=9">
     <style>
         html, body { margin: 0; height: 100%; }
         body { overflow: hidden; -webkit-tap-highlight-color: transparent; background: #5a3820; }
@@ -429,7 +429,7 @@ done.add(mate.vertex);
 const b = vertices[mate.vertex], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
 let ox = a.y - b.y, oy = b.x - a.x; const len = Math.hypot(ox, oy) || 1; ox /= len; oy /= len;
 if (ox * (mx - view.cx) + oy * (my - view.cy) < 0) { ox = -ox; oy = -oy; }
-tx = mx + ox * 0.66 * U; ty = my + oy * 0.66 * U;
+tx = mx + ox * 0.76 * U; ty = my + oy * 0.76 * U;
 piers = `M${a.x},${a.y}L${tx},${ty}M${b.x},${b.y}L${tx},${ty}`;
 } else {
 const dx = a.x - view.cx, dy = a.y - view.cy, d = Math.hypot(dx, dy) || 1;
@@ -520,9 +520,9 @@ const r = RIDX[hb.type] ?? -1;
 return (
 <g key={k} className="port" data-port={hb.type} data-at={k}>
 <path d={hb.piers} className="pier"/>
-<circle cx={hb.tx} cy={hb.ty} r={0.42 * U} className="ptok" style={r >= 0 ? {stroke: ART.RES_COL[r]} : undefined}/>
-{r >= 0 && <svg x={hb.tx - 0.17 * U} y={hb.ty - 0.4 * U} width={0.34 * U} height={0.34 * U} viewBox="0 0 20 20" aria-hidden="true" dangerouslySetInnerHTML={{__html: ART.RES_ICON[r]}}/>}
-<text x={hb.tx} y={hb.ty + (r >= 0 ? 0.2 : 0.13) * U} className="ptxt">{r >= 0 ? '2:1' : '3:1'}</text>
+<circle cx={hb.tx} cy={hb.ty} r={0.38 * U} className="ptok" style={r >= 0 ? {stroke: ART.RES_COL[r]} : undefined}/>
+{r >= 0 && <svg x={hb.tx - 0.15 * U} y={hb.ty - 0.35 * U} width={0.3 * U} height={0.3 * U} viewBox="0 0 20 20" aria-hidden="true" dangerouslySetInnerHTML={{__html: ART.RES_ICON[r]}}/>}
+<text x={hb.tx} y={hb.ty + (r >= 0 ? 0.19 : 0.13) * U} className="ptxt">{r >= 0 ? '2:1' : '3:1'}</text>
 </g>
 );
 })}</g>}
