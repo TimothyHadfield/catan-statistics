@@ -172,7 +172,7 @@
       vOwner: new Array(Gm.V.length).fill(-1), vLevel: new Array(Gm.V.length).fill(0), eOwner: new Array(Gm.E.length).fill(-1),
       bank: new Array(5).fill(R.big ? 24 : 19), deck, build: null,
       phase: 'setup', order, step: 0, sub: 'settle', lastV: -1,
-      turn: 0, turns: 0, dice: null, devUsed: false, freeRoads: 0, discard: null, robberBack: 'main', offer: null, offers: 0,
+      turn: 0, turns: 0, dice: null, devUsed: false, freeRoads: 0, discard: null, robberBack: 'main', offer: null, offers: 0, offered: [],
       longest: { p: -1, len: 0 }, army: { p: -1, size: 0 }, roadLen: new Array(n).fill(0),
       winner: -1, log: [], rolls: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     });
@@ -294,7 +294,7 @@
     } else nextTurn(st);
   }
   function nextTurn(st) {
-    st.turn = (st.turn + 1) % st.n; st.turns++; st.phase = 'roll'; st.devUsed = false; st.offers = 0;
+    st.turn = (st.turn + 1) % st.n; st.turns++; st.phase = 'roll'; st.devUsed = false; st.offers = 0; st.offered = [];
     st.players.forEach(Q => { Q.fresh = []; }); st.dice = null;
     if (st.turns >= st.rules.maxTurns) { // safety valve for endless games: most points wins
       let best = 0; for (let i = 1; i < st.n; i++) if (vp(st, i) > vp(st, best)) best = i;
@@ -304,6 +304,7 @@
 
   // ------------------------------------------------------------ apply
   function fail(msg) { throw new Error(msg); }
+  const offerKey = (give, get) => give.join(',') + '>' + get.join(','); // same cards both ways = same offer
   const isHand = a => Array.isArray(a) && a.length === 5 && a.every(x => Number.isInteger(x) && x >= 0);
 
   function apply(st, seat, a) {
@@ -487,7 +488,7 @@
         if (a.give.some((c, r) => c && a.get[r])) fail('Don\'t ask for what you give');
         if (!canPay(P.res, a.give)) fail('You don\'t have those');
         if (st.offers >= 3) fail('Three offers a turn');
-        st.offers++;
+        st.offers++; (st.offered || (st.offered = [])).push(offerKey(a.give, a.get)); // this turn's offers, so computers don't repeat one
         const resp = st.players.map((Q, i) => (i === p ? false : canPay(Q.res, a.get) ? null : false));
         st.offer = { from: p, give: a.give.slice(), get: a.get.slice(), resp, stage: 'ask' };
         st.phase = 'trade';
@@ -549,7 +550,7 @@
 
   const api = { RES, COST, PIECES, DEV, DEV_BIG, COLORS, G, BIG, geo, HEXES, pips, hexAdj, newGame, apply, actors, vp, publicVP, rate, portsOf,
     robberHexes, canBuildAny,
-    roadOk, settleOk, legalRoads, legalSettles, setupSpots, farEnough, playable, longestRoad, victims, view, sum, canPay,
+    roadOk, settleOk, legalRoads, legalSettles, setupSpots, farEnough, playable, longestRoad, victims, view, sum, canPay, offerKey,
     roadsLeft, settlesLeft, citiesLeft, rnd, BEGIN_RES, BEGIN_NUM };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CatanEngine = api;
 })(typeof window !== 'undefined' ? window : globalThis);
