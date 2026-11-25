@@ -110,6 +110,23 @@ body.at-table.game-over .board-wrap { max-height: calc(100dvh - var(--head) - va
 #board .hl-v:hover .hl-c { fill: #fff6c8; }
 .fx-still #board .hl-edge, .fx-still #board .hl-city { animation: none; }
 .fly-card { position: fixed; width: 18px; height: 24px; border-radius: 3px; border: 1.5px solid #f3e7c9; box-shadow: 0 2px 5px rgba(0,0,0,.5); z-index: 60; pointer-events: none; }
+/* table effects (2026-11-24): centre dice, resource cards out of tiles, rings on new pieces; overlay only, never takes taps */
+.dice-fx { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 5; }
+.dice-fx[hidden] { display: none; }
+.dfx-in { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 16px 8px; border-radius: 18px; background: rgba(15,17,23,.62); border: 2px solid var(--pc); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.dfx-dice { display: flex; gap: 12px; --die-size: 58px; }
+.dfx-sum { font: 800 24px/1 system-ui, sans-serif; color: #fff; opacity: 0; transition: opacity .15s; font-variant-numeric: tabular-nums; }
+.dfx-sum.on { opacity: 1; }
+.dfx-sum.seven { color: #ff8a7a; }
+@media (min-width: 900px) { .dfx-dice { --die-size: 84px; gap: 16px; } .dfx-sum { font-size: 32px; } }
+.res-fly { position: fixed; width: 28px; height: 36px; border-radius: 5px; background: linear-gradient(160deg, color-mix(in srgb, var(--rc) 85%, #fff), var(--rc)); border: 2px solid #f3e7c9; box-shadow: 0 3px 8px rgba(0,0,0,.55); display: grid; place-items: center; z-index: 60; pointer-events: none; }
+.res-fly .ri { width: 20px; height: 20px; }
+.res-fly.back { background: repeating-linear-gradient(45deg, #7a5a1c 0 4px, #5a4214 4px 8px); }
+#board .fx-mark { animation: mark 1.25s ease-out forwards; }
+@keyframes mark { 0% { opacity: 0; } 12% { opacity: 1; } 40% { opacity: .35; } 62% { opacity: 1; } 100% { opacity: 0; } }
+#board .mk-glow { fill: none; stroke: #fff; stroke-width: 11; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
+#board .mk-ring { fill: none; stroke-width: 5; stroke-linejoin: round; }
+#board .mk-line { stroke-width: 6; stroke-linecap: round; }
 
 /* ---------- other players ---------- */
 .seats { display: flex; gap: 6px; padding: 6px 8px 0; flex: none; }

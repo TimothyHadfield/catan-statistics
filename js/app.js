@@ -403,14 +403,19 @@ function changed() {
   render();
   scheduleBots();
 }
+// Normal speed: how long (ms) the table pauses after each kind of move before a computer moves again
+const PACE = { roll: 1900, settle: 1200, city: 1200, road: 1000, buy: 1100, play: 1300, robber: 1500, bank: 1300, deal: 1400,
+  offer: 1300, nodeal: 1000, discard: 1100, end: 900, pass: 600, longest: 1500, army: 1500 };
 function scheduleBots() {
   clearTimeout(app.botTimer);
   const st = app.st; if (!st || st.phase === 'over' || app.net) return;
   const bots = E.actors(st).filter(i => st.players[i].kind === 'cpu');
   if (!bots.length) return;
   const fast = S.speed === 'fast';
-  const lastRoll = st.log.length && st.log[st.log.length - 1].k === 'roll';
-  const delay = S.speed === 'test' ? 1 : (fast ? 260 : 650) + (lastRoll ? (fast ? 350 : 700) : 0); // 'test' = headless soak runs only
+  const lastE = st.log.length ? st.log[st.log.length - 1] : null, lastRoll = lastE && lastE.k === 'roll';
+  // Normal: each action stays on screen long enough to follow (Tim 2026-11-24); a roll waits for its dice + card flights
+  const delay = S.speed === 'test' ? 1 : fast ? 260 + (lastRoll ? 350 : 0) // 'test' = headless soak runs only
+    : Math.max(lastE ? PACE[lastE.k] || 900 : 900, (app.fxUntil || 0) - Date.now() + 250);
   app.botTimer = setTimeout(() => {
     if (app.st !== st) return;
     let s = st;
@@ -427,27 +432,158 @@ function fxStep(c) {
   const first = app.logN === 0 && g.log.length && !app.freshGame;
   app.logN = g.logN || 0; app.freshGame = false;
   if (first || !newer.length) return;
-  for (const e of newer) {
+  const slow = S.speed === 'normal'; // Fast (and the headless 'test' speed) keep the quick effects
+  const lastRoll = newer.map(e => e.k).lastIndexOf('roll'); // after a catch-up, only the newest roll plays
+  newer.forEach((e, i) => {
+    const other = e.p !== c.seat;
     if (e.k === 'roll') {
+      if (i !== lastRoll) return;
       FX.play('diceRoll');
-      const dice = document.querySelectorAll('#dice .tbl-die');
-      if (dice.length === 2) { TABLE.roll(dice[0], e.d[0]); TABLE.roll(dice[1], e.d[1]); }
       const t = e.d[0] + e.d[1];
-      if (t === 7) { setTimeout(() => FX.play('stamp'), 500); continue; }
-      setTimeout(() => flashNumber(t), 600);
-      if (e.gain) setTimeout(() => showGains(g, c.seat, e.gain, t), 650);
-    } else if (e.k === 'settle' || e.k === 'city' || e.k === 'road') FX.play(e.k === 'road' ? 'slide' : 'place', { pitch: e.k === 'city' ? 0.8 : 1 });
-    else if (e.k === 'robber') { FX.play('stamp'); if (e.from === c.seat) toast(`${nm(g, e.p)} robbed you`); }
-    else if (e.k === 'buy') FX.play('cardFlip');
-    else if (e.k === 'play') { FX.play('cardSlide'); if (e.p !== c.seat) toast(`${nm(g, e.p)} played ${DEV_NAME[e.card]}${e.card === 'M' ? ': all ' + RES[e.r] : ''}`); }
-    else if (e.k === 'deal') FX.play('cardDeal');
+      if (!slow) {
+        diceFx(e, false);
+        if (t === 7) { setTimeout(() => FX.play('stamp'), 500); return; }
+        setTimeout(() => flashNumber(t), 600);
+        if (e.gain) setTimeout(() => showGains(g, c.seat, e.gain, t), 650);
+        return;
+      }
+      const land = diceFx(e, true);
+      app.fxUntil = Date.now() + land.ms + 700;
+      land.done.then(() => {
+        if (t === 7) { FX.play('stamp'); return; }
+        flashNumber(t);
+        if (e.gain) { const n = flyGains(g, c.seat, e.gain, t); if (n) FX.play('cardDeal'); }
+      });
+      if (t !== 7 && e.gain) app.fxUntil += Math.max(0, countGains(g, e.gain, t) - 1) * FLY_GAP + FLY_MS - 700;
+    } else if (e.k === 'settle' || e.k === 'city' || e.k === 'road') {
+      FX.play(e.k === 'road' ? 'slide' : 'place', { pitch: e.k === 'city' ? 0.8 : 1 });
+      if (slow && other) markPiece(e);
+    } else if (e.k === 'robber') {
+      FX.play('stamp'); if (e.from === c.seat) toast(`${nm(g, e.p)} robbed you`);
+      if (slow && other) { markHex(e.h); if (e.from >= 0) flySteal(e.from, e.p, c.seat); }
+    } else if (e.k === 'buy') { FX.play('cardFlip'); if (slow && other) flashSeat(e.p); }
+    else if (e.k === 'play') { FX.play('cardSlide'); if (other) toast(`${nm(g, e.p)} played ${DEV_NAME[e.card]}${e.card === 'M' ? ': all ' + RES[e.r] : ''}`); if (slow && other) flashSeat(e.p); }
+    else if (e.k === 'bank' || e.k === 'discard') { if (slow && other) flashSeat(e.p); }
+    else if (e.k === 'deal') { FX.play('cardDeal'); if (slow) { flashSeat(e.p); flashSeat(e.with); } }
     else if (e.k === 'longest' && e.p >= 0) { FX.play('ding'); toast(`${nm(g, e.p)} take${e.p === c.seat ? '' : 's'} Longest Road`); }
     else if (e.k === 'army') { FX.play('ding'); toast(`${nm(g, e.p)} take${e.p === c.seat ? '' : 's'} Largest Army`); }
     else if (e.k === 'win') {
       const mine = e.p === c.seat;
       setTimeout(() => FX.celebrate({ kind: mine ? 'win' : 'lose', colors: [colorOf(e.p), '#f5d76e', '#fff'] }), 400);
     } else if (e.k === 'end' && g.turn === c.seat && g.players[c.seat].kind !== 'cpu') FX.play('turn');
+  });
+}
+// ---- Normal-speed table effects: overlay layers only (nothing in the page moves or resizes), taps pass through
+const still = () => !FX.settings.animations || matchMedia('(prefers-reduced-motion: reduce)').matches; // fade only
+const FLY_GAP = 130, FLY_MS = 950;
+// big dice tumbling in the middle of the board, landing on the real roll, then fading; returns when they land
+function diceFx(e, slow) {
+  const wrap = $('#boardWrap');
+  if (!wrap || app.tab !== 'play') return { ms: 0, done: Promise.resolve() };
+  let box = $('#diceFx');
+  if (!box) { box = document.createElement('div'); box.id = 'diceFx'; box.className = 'dice-fx'; box.setAttribute('aria-hidden', 'true'); wrap.appendChild(box); }
+  const gen = (box.gen || 0) + 1; box.gen = gen;
+  (box.getAnimations ? box.getAnimations() : []).forEach(a => a.cancel());
+  const t = e.d[0] + e.d[1], tumble = slow ? 850 : 450, hold = slow ? 750 : 350, fadeIn = slow ? 150 : 100, fadeOut = slow ? 300 : 200;
+  box.innerHTML = `<div class="dfx-in" style="--pc:${colorOf(e.p)}"><div class="dfx-dice"><div class="tbl-die"></div><div class="tbl-die"></div></div><b class="dfx-sum${t === 7 ? ' seven' : ''}">${t}</b></div>`;
+  box.hidden = false;
+  const dice = box.querySelectorAll('.tbl-die'), sum = box.querySelector('.dfx-sum');
+  TABLE.die(dice[0], 1 + Math.floor(Math.random() * 6)); TABLE.die(dice[1], 1 + Math.floor(Math.random() * 6));
+  const anim = (el, f, o) => { try { return el.animate(f, Object.assign({ fill: 'forwards' }, o)); } catch (x) { return null; } };
+  anim(box, [{ opacity: 0 }, { opacity: 1 }], { duration: fadeIn });
+  const ms = fadeIn + tumble; // reduced motion: same timing, the dice just show their faces (no tumble)
+  const done = new Promise(res => {
+    if (still()) { TABLE.die(dice[0], e.d[0]); TABLE.die(dice[1], e.d[1]); setTimeout(res, ms); return; }
+    setTimeout(() => Promise.all([TABLE.roll(dice[0], e.d[0], { duration: tumble }), TABLE.roll(dice[1], e.d[1], { duration: tumble })]).then(res), fadeIn);
+  }).then(() => {
+    if (box.gen !== gen) return;
+    sum.classList.add('on');
+    setTimeout(() => {
+      if (box.gen !== gen) return;
+      const a = anim(box, [{ opacity: 1 }, { opacity: 0 }], { duration: fadeOut });
+      const hide = () => { if (box.gen === gen) { box.hidden = true; box.innerHTML = ''; } };
+      if (a) a.onfinish = hide; else hide();
+    }, hold);
+  });
+  return { ms, done };
+}
+// one card per resource card paid (cities 2), capped by what the bank really gave
+function gainCards(g, gain, num) {
+  const left = gain.map(a => (a ? a.slice() : [0, 0, 0, 0, 0])), out = [];
+  g.hexNum.forEach((n, h) => {
+    if (n !== num || h === g.robber) return;
+    const r = g.hexRes[h];
+    G.hexVerts[h].forEach(v => {
+      const o = g.vOwner[v]; if (o < 0 || !left[o]) return;
+      const k = Math.min(g.vLevel[v] === 2 ? 2 : 1, left[o][r]); left[o][r] -= k;
+      for (let j = 0; j < k; j++) out.push({ h, r, o });
+    });
+  });
+  return out;
+}
+const countGains = (g, gain, num) => gainCards(g, gain, num).length;
+// each card pops out of its tile, then flies to the player's seat (your own cards: to that card in your hand)
+function flyGains(g, me, gain, num) {
+  const cards = gainCards(g, gain, num), fade = still();
+  cards.forEach(({ h, r, o }, i) => {
+    const [sx, sy] = svgToScreen(G.HEXES[h].x * U, G.HEXES[h].y * U);
+    const to = o === me ? document.querySelector(`#mine .rc[data-r="${r}"]`) : document.querySelector(`.opp[data-p="${o}"]`);
+    const el = document.createElement('div'); el.className = 'res-fly'; el.style.cssText = `--rc:${RES_COL[r]};left:${sx - 14}px;top:${sy - 18}px;opacity:0`;
+    el.innerHTML = resIcon(r);
+    document.body.appendChild(el);
+    let frames;
+    if (fade || !to) frames = [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.75 }, { opacity: 0 }];
+    else {
+      const b = to.getBoundingClientRect(), dx = b.left + b.width / 2 - sx, dy = b.top + b.height / 2 - sy;
+      frames = [{ transform: 'translate(0,0) scale(.4)', opacity: 0 }, { transform: 'translate(0,-6px) scale(1.15)', opacity: 1, offset: 0.18 },
+        { transform: 'translate(0,-6px) scale(1.15)', opacity: 1, offset: 0.32 }, { transform: `translate(${dx}px,${dy}px) scale(.8)`, opacity: 0.9 }];
+    }
+    let a = null;
+    try { a = el.animate(frames, { duration: FLY_MS, delay: i * FLY_GAP, easing: 'cubic-bezier(.45,.05,.35,1)', fill: 'both' }); } catch (x) { /* no animations */ }
+    if (a) a.onfinish = a.oncancel = () => el.remove(); else setTimeout(() => el.remove(), 10);
+  });
+  return cards.length;
+}
+// a ring on another player's new road / town / city, and on the robber's new tile
+function fxLayer() {
+  let l = $('#fxg');
+  if (!l) { $('#board').insertAdjacentHTML('beforeend', '<g id="fxg" style="pointer-events:none"></g>'); l = $('#fxg'); }
+  return l;
+}
+function addMark(svg) {
+  const l = fxLayer(), id = 'm' + Math.random().toString(36).slice(2);
+  l.insertAdjacentHTML('beforeend', `<g class="fx-mark" id="${id}">${svg}</g>`);
+  setTimeout(() => { const m = document.getElementById(id); if (m) m.remove(); }, 1300);
+}
+function markPiece(e) {
+  const col = colorOf(e.p);
+  if (e.k === 'road') {
+    const [a, b] = G.E[e.e].v, [ax, ay] = pt(a), [bx, by] = pt(b);
+    addMark(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="mk-glow"/><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="mk-line" style="stroke:${col}"/>`);
+  } else {
+    const [x, y] = pt(e.v);
+    addMark(`<circle cx="${x}" cy="${y}" r="${0.62 * U}" class="mk-glow"/><circle cx="${x}" cy="${y}" r="${0.62 * U}" class="mk-ring" style="stroke:${col}"/>`);
   }
+}
+function markHex(h) {
+  const P = hexPts(h).map(q => q.join(',')).join(' ');
+  addMark(`<polygon points="${P}" class="mk-glow"/><polygon points="${P}" class="mk-ring" style="stroke:#1b1410"/>`);
+}
+function flashSeat(p) { const el = document.querySelector(`.opp[data-p="${p}"]`); if (el) FX.flash(el, colorOf(p)); }
+// robber steal: a face-down card goes from the victim to the thief
+function flySteal(from, to, me) {
+  const src = from === me ? $('#mine') : document.querySelector(`.opp[data-p="${from}"]`);
+  const dst = to === me ? $('#mine') : document.querySelector(`.opp[data-p="${to}"]`);
+  if (!src || !dst) return;
+  const a = src.getBoundingClientRect(), b = dst.getBoundingClientRect();
+  const el = document.createElement('div'); el.className = 'res-fly back'; el.style.cssText = `left:${a.left + a.width / 2 - 14}px;top:${a.top + a.height / 2 - 18}px;opacity:0`;
+  document.body.appendChild(el);
+  const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
+  const frames = still() ? [{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 0 }]
+    : [{ transform: 'translate(0,0)', opacity: 0 }, { transform: 'translate(0,0)', opacity: 1, offset: 0.2 }, { transform: `translate(${dx}px,${dy}px)`, opacity: 0.9 }];
+  let an = null;
+  try { an = el.animate(frames, { duration: 900, delay: 350, easing: 'cubic-bezier(.45,.05,.35,1)', fill: 'both' }); } catch (x) { /* no animations */ }
+  if (an) an.onfinish = an.oncancel = () => el.remove(); else el.remove();
 }
 const nm = (g, p) => (p === current()?.seat && !current()?.online && humans(app.st || g).length === 1 ? 'You' : g.players[p].name);
 function flashNumber(n) {
