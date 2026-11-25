@@ -303,6 +303,19 @@ function weightsFor(g, seat) {
 const spotPips = (g, v, w) => (w ? Math.round(W.weightedSum(cornerHexes(g, v), w)) : G.V[v].hexes.reduce((a, h) => a + E.pips(g.hexNum[h]), 0));
 // "Advisor" (js/advisor.js): each open corner's score for this seat (your value + new resources/numbers +
 // denying opponents + cutting their roads), on the dot scale; null when off. Replaces the corner numbers.
+// the board before Start shows the same corner numbers the game will (Odds / Weighted / Mine / Advisor, as you),
+// so a board can be judged before committing to it (Tim 2026-11-25: "allow the weighted or odds displays to be
+// shown on the board before you actually start the game")
+function previewOdds(g) {
+  if (!S.spotOdds) return '';
+  const w = weightsFor(g, 0), adv = advisorFor(g, 0);
+  let h = '';
+  g.vOwner.forEach((o, v) => {
+    const [x, y] = pt(v), odds = adv && adv[v] != null ? Math.round(adv[v]) : spotPips(g, v, w);
+    if (ART.oddsShown(odds, S.oddsAll)) h += `<g class="odds-p">${ART.oddsBadge(x, y, U, odds)}</g>`;
+  });
+  return h;
+}
 function advisorFor(g, seat) {
   if (!S.advisor || seat < 0 || !window.CatanAdvisor) return null;
   const A = window.CatanAdvisor;
@@ -901,6 +914,7 @@ function newGamePanel() {
     <div style="margin-top:6px">${rows}</div>
     ${n >= 5 ? `<div class="small muted" style="margin-top:8px">Big board · extra build step after each turn ${why('big')}</div>`
       : `<div class="seg" id="boardSeg" style="margin-top:8px" aria-label="Board">${[['random', S.balanced ? 'Balanced board' : 'Random board'], ['beginner', 'Beginner board']].map(([k, l]) => `<button aria-pressed="${S.board === k}" data-board="${k}"${k === 'random' && S.board === k ? ' aria-label="Deal a new random board"' : ''}>${l}${k === 'random' && S.board === k ? ' <span class="reroll" aria-hidden="true">↻</span>' : ''}</button>`).join('')}</div>`}
+    <div class="ng-lv">${levers()}</div>
     ${houseLine() ? `<div class="small muted" style="margin-top:6px">House rules: ${houseLine()} · <button class="link" data-tab-go="settings">change</button></div>` : ''}
   </div>${ONLINE ? `
   <div class="phase" style="margin-top:10px">
@@ -1136,7 +1150,7 @@ function renderMain() {
   document.body.classList.toggle('finale', !!ending);
   if (!c || lobby) {
     const demo = demoBoard();
-    useGeo(demo); drawStatic(demo); $('#live').innerHTML = '';
+    useGeo(demo); drawStatic(demo); $('#live').innerHTML = previewOdds(demo);
     $('#seats').hidden = true; $('#mine').hidden = true;
     $('#panel').innerHTML = lobby ? lobbyPanel() : newGamePanel();
     bindPanel(); return;

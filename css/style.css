@@ -46,6 +46,7 @@ main { min-height: 0; overflow: hidden; position: relative; }
 body.at-table .board-wrap { max-height: calc(100dvh - var(--head) - var(--tabh) - 268px); }
 /* end screen: the board keeps its in-game size (it used to shrink here, Tim 2026-11-25: "zooms out really far"); one-line score rows */
 .phase .seat.endrow { min-height: 0; padding: 4px 0; } .seat.endrow .bd { display: inline; margin-left: 6px; }
+.ng-lv { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
 #boardSeg .reroll { margin-left: 3px; font-weight: 700; }
 /* end screen: what each player held (hidden points, cards, dev cards) */
 .seat.endrow .eh { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; margin-top: 2px; color: var(--muted); font-size: 11.5px; }
