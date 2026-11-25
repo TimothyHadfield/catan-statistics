@@ -26,5 +26,12 @@
   const houseD = (x, y, k) => `M${x - k},${y + k * .75}V${y - k * .15}L${x},${y - k * .95}L${x + k},${y - k * .15}V${y + k * .75}Z`;
   // corner odds badge colour: red (3 dots or fewer) to green (12 or more)
   const oddsFill = odds => `hsl(${Math.round(Math.max(0, Math.min(1, (odds - 3) / 9)) * 120)},70%,80%)`;
-  root.CatanArt = { RES_COL, RES_ICON, DEFS, patterns, houseD, oddsFill };
+  // corner odds badge: small, a thin dark hairline instead of a coloured ring (Tim 2026-11-24:
+  // "making the odds circles smaller and removing the red circle around them"). Sizes in hex radii.
+  const ODDS = { r: 0.21, ty: 0.105, tyLong: 0.085 };
+  const oddsBadge = (x, y, U, odds) => {
+    const txt = String(odds), long = txt.length > 2;
+    return `<circle cx="${x}" cy="${y}" r="${ODDS.r * U}" class="hl-c" style="fill:${oddsFill(odds)}"/><text x="${x}" y="${y + (long ? ODDS.tyLong : ODDS.ty) * U}" class="hl-t${long ? ' long' : ''}">${txt}</text>`;
+  };
+  root.CatanArt = { RES_COL, RES_ICON, DEFS, patterns, houseD, oddsFill, ODDS, oddsBadge };
 })(typeof window !== 'undefined' ? window : globalThis);

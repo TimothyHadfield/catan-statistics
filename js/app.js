@@ -197,10 +197,11 @@ function drawLive(c) {
   // what I may tap now
   const hl = targets(c), wNow = weightsFor(g, me);
   // Odds on: when not placing a town, every open corner still shows its number (look-only, taps pass through)
+  // badges are small and have no coloured ring (Tim 2026-11-24: "making the odds circles smaller and removing the red circle")
   if (S.spotOdds && hl.kind !== 'settle') g.vOwner.forEach((o, v) => {
     if (!openCorner(g, v)) return;
-    const [x, y] = pt(v), odds = spotPips(g, v, wNow), txt = String(odds);
-    h += `<g class="odds-p"><circle cx="${x}" cy="${y}" r="${0.26 * U}" class="hl-c" style="stroke:rgba(0,0,0,.45);stroke-width:1.5;fill:${ART.oddsFill(odds)}"/><text x="${x}" y="${y + (txt.length > 2 ? 0.1 : 0.12) * U}" class="hl-t${txt.length > 2 ? ' long' : ''}">${txt}</text></g>`;
+    const [x, y] = pt(v), odds = spotPips(g, v, wNow);
+    h += `<g class="odds-p">${ART.oddsBadge(x, y, U, odds)}</g>`;
   });
   hl.hexes.forEach(i => { const P = hexPts(i).map(q => q.join(',')).join(' '); h += `<polygon points="${P}" class="hl-hex" data-h="${i}"/>`; });
   hl.edges.forEach(e => {
@@ -210,10 +211,9 @@ function drawLive(c) {
   hl.verts.forEach(v => {
     const [x, y] = pt(v);
     // a number only where a town may really go: empty corner, no building one road away
+    // Odds off: a small soft dot marks the spot instead of an empty white circle; the tap circle stays full size
     const odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotPips(g, v, wNow) : '';
-    const fill = odds !== '' ? `;fill:${ART.oddsFill(odds)}` : '';
-    const txt = String(odds);
-    h += `<g class="hl-v" data-v="${v}"><circle cx="${x}" cy="${y}" r="${0.3 * U}" class="hl-c" style="stroke:${colorOf(me)}${fill}"/>${odds !== '' ? `<text x="${x}" y="${y + (txt.length > 2 ? 0.1 : 0.13) * U}" class="hl-t${txt.length > 2 ? ' long' : ''}">${txt}</text>` : ''}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
+    h += `<g class="hl-v" data-v="${v}">${odds !== '' ? ART.oddsBadge(x, y, U, odds) : `<circle cx="${x}" cy="${y}" r="${0.11 * U}" class="hl-dot"/>`}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
   });
   hl.cities.forEach(v => { const [x, y] = pt(v); h += `<g class="hl-v" data-v="${v}"><circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hl-city"/><circle cx="${x}" cy="${y}" r="${0.45 * U}" class="hit"/></g>`; });
   $('#live').innerHTML = h;
@@ -476,15 +476,22 @@ function fxStep(c) {
 // ---- Normal-speed table effects: overlay layers only (nothing in the page moves or resizes), taps pass through
 const still = () => !FX.settings.animations || matchMedia('(prefers-reduced-motion: reduce)').matches; // fade only
 const FLY_GAP = 130, FLY_MS = 950;
-// big dice tumbling in the middle of the board, landing on the real roll, then fading; returns when they land
+// big dice tumbling beside the board, landing on the real roll, then fading; returns when they land.
+// They sit over the action panel (phone: below the board; laptop: top of the right column), never over
+// the tiles (Tim 2026-11-24: "make the dice rolling slightly off the board")
 function diceFx(e, slow) {
-  const wrap = $('#boardWrap');
-  if (!wrap || app.tab !== 'play') return { ms: 0, done: Promise.resolve() };
+  const spot = $('#panel') && $('#panel').firstElementChild;
+  if (!spot || app.tab !== 'play') return { ms: 0, done: Promise.resolve() };
   let box = $('#diceFx');
-  if (!box) { box = document.createElement('div'); box.id = 'diceFx'; box.className = 'dice-fx'; box.setAttribute('aria-hidden', 'true'); wrap.appendChild(box); }
+  if (!box) { box = document.createElement('div'); box.id = 'diceFx'; box.className = 'dice-fx'; box.setAttribute('aria-hidden', 'true'); document.body.appendChild(box); }
   const gen = (box.gen || 0) + 1; box.gen = gen;
   (box.getAnimations ? box.getAnimations() : []).forEach(a => a.cancel());
   const t = e.d[0] + e.d[1], tumble = slow ? 850 : 450, hold = slow ? 750 : 350, fadeIn = slow ? 150 : 100, fadeOut = slow ? 300 : 200;
+  const pr = $('#panel').getBoundingClientRect(), sr = spot.getBoundingClientRect();
+  // laptop: a taller box (it may reach over the top of the dots table for the moment the dice show)
+  const top = Math.max(pr.top, sr.top), hgt = Math.max(innerWidth >= 900 ? 150 : 72, Math.min(sr.bottom, pr.bottom) - top);
+  // room for a die tumbling corner-up (about 1.4x its size) inside the box
+  box.style.cssText = `left:${sr.left}px;top:${top}px;width:${sr.width}px;height:${hgt}px;--die-size:${Math.round(Math.max(36, Math.min(84, (hgt - 16) / 1.5)))}px`;
   box.innerHTML = `<div class="dfx-in" style="--pc:${colorOf(e.p)}"><div class="dfx-dice"><div class="tbl-die"></div><div class="tbl-die"></div></div><b class="dfx-sum${t === 7 ? ' seven' : ''}">${t}</b></div>`;
   box.hidden = false;
   const dice = box.querySelectorAll('.tbl-die'), sum = box.querySelector('.dfx-sum');
@@ -623,9 +630,11 @@ function seatsHTML(c) {
     if (i === seat) return '';
     const on = c.toAct.includes(i), lr = g.longest.p === i, la = g.army.p === i;
     const away = app.net && app.net.seats && app.net.seats[i] && app.net.seats[i].kind === 'human' && !app.net.seats[i].online;
+    // phone: one compact card per player in the top row; laptop: the same card, bigger, in a column
+    // beside the board with small labels under each number (CSS shows the labels only there)
     return `<div class="opp${on ? ' on' : ''}" data-p="${i}" style="--pc:${colorOf(i)}">
       <div class="opp-n"><i class="pc"></i><span class="nm">${esc(P.name)}</span>${P.kind === 'cpu' ? `<span class="lv">${P.level[0].toUpperCase()}</span>` : ''}${away ? '<span class="lv">away</span>' : ''}</div>
-      <div class="opp-s"><b class="vp">${vpOf(g, i, false)}</b><span title="Cards" class="ct"><i class="ic-card"></i>${P.res}</span><span title="Development cards" class="ct"><i class="ic-dev"></i>${P.dev}</span>${P.knights ? `<span title="Knights played" class="ct kn">⚔${P.knights}</span>` : ''}${lr ? '<span class="aw" title="Longest Road">LR</span>' : ''}${la ? '<span class="aw" title="Largest Army">LA</span>' : ''}</div>
+      <div class="opp-s"><span class="st pts" title="Points"><b class="vp">${vpOf(g, i, false)}</b><small>points</small></span><span title="Cards" class="st ct"><span class="sv"><i class="ic-card"></i><b>${P.res}</b></span><small>cards</small></span><span title="Development cards" class="st ct"><span class="sv"><i class="ic-dev"></i><b>${P.dev}</b></span><small>dev</small></span><span title="Knights played" class="st ct kn${P.knights ? '' : ' none'}"><span class="sv">⚔<b>${P.knights}</b></span><small>knights</small></span>${lr ? '<span class="aw" title="Longest Road"><span class="ab">LR</span><span class="af">Longest road</span></span>' : ''}${la ? '<span class="aw" title="Largest Army"><span class="ab">LA</span><span class="af">Largest army</span></span>' : ''}</div>
     </div>`;
   }).join('');
 }
@@ -909,7 +918,7 @@ const diceLiveHTML = c => `${chartHTML(c.g)}<div class="sep"></div>${dotsHTML(c)
 function diceSheet(c) {
   openSheet(`<div class="sheet-h"><span class="h">Dice this game</span><button class="btn sm ghost" data-close>Close</button></div><div id="diceLive">${diceLiveHTML(c)}</div>`);
 }
-// laptop only: the table's recent events and the dice so far (hidden on phones by CSS)
+// the table's recent events, for the full log sheet
 function feedLines(c, n) {
   const { g, seat } = c;
   return g.log.slice().reverse().map(e => ({ e, s: describe(g, e, seat) })).filter(x => x.s).slice(0, n)
@@ -959,11 +968,13 @@ function dotsHTML(c, cards) {
   }).join('');
   return `<div class="dots${cards ? ' wc' : ''}${w ? ' wt' : ''}"><div class="dw">${wLevers()}</div>${head}${table}${rows}</div>`;
 }
+// laptop column under the action panel: dots table, then the dice chart, which takes whatever height is
+// left so the column never scrolls. The history box is gone (Tim 2026-11-24: "I don't think the table
+// with past history is necessary"); the one-line latest event in the panel still opens the full log.
 function sideHTML(c) {
   const { g } = c;
-  return `<div class="phase side-only"><div class="cap">Table</div><ul class="feed">${feedLines(c, g.n >= 5 ? 8 - g.n : 10 - g.n)}</ul></div>
-    <div class="phase side-only"><div class="cap">Dice this game</div>${chartHTML(g)}</div>
-    <div class="phase side-only" id="dotsBox">${dotsHTML(c, true)}</div>`;
+  return `<div class="phase side-only" id="dotsBox">${dotsHTML(c, true)}</div>
+    <div class="phase side-only side-chart"><div class="cap">Dice this game</div>${chartHTML(g)}</div>`;
 }
 
 // ------------------------------------------------------------ settings
@@ -1000,7 +1011,7 @@ function renderMain() {
   $('#playView').hidden = app.tab !== 'play';
   $('#trackerView').hidden = app.tab !== 'tracker';
   $('#settingsView').hidden = app.tab !== 'settings';
-  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=2'; return; }
+  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=3'; return; }
   if (app.tab === 'settings') { renderSettings(); return; }
   const c = current();
   const lobby = app.net && (app.net.status === 'lobby' || app.net.status === 'joining');
@@ -1015,7 +1026,6 @@ function renderMain() {
   }
   drawStatic(c.g);
   const dl = $('#diceLive'); if (dl && !$('#sheet').hidden) dl.innerHTML = diceLiveHTML(c);
-  fxStep(c);
   drawLive(c);
   $('#seats').hidden = false; $('#seats').innerHTML = seatsHTML(c); $('#seats').classList.toggle('many', c.g.n >= 5);
   const noHand = app.coverFor >= 0 || c.g.phase === 'over'; // the end screen needs the room for the scores
@@ -1026,6 +1036,7 @@ function renderMain() {
   else if (c.g.phase !== 'over') $('#panel').insertAdjacentHTML('beforeend', `<div class="row netbar small muted"><button class="btn sm ghost" id="diceBtn">Dice</button><span class="grow"></span><button class="btn sm ghost" id="quitBtn">Quit game</button></div>`);
   document.querySelectorAll('#dice .tbl-die').forEach(d => TABLE.die(d, +d.dataset.v));
   bindPanel();
+  fxStep(c); // after the panel and seats are drawn: the dice sit over the new panel, cards fly to the new seats
 }
 let demoCache = null;
 function demoBoard() { // shown behind the new-game panel: the beginner board, or a big board for 5-6 players
