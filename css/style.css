@@ -389,6 +389,10 @@ button.rc { font: inherit; padding: 0; cursor: pointer; }
 /* four levers (with Advisor) don't fit one line beside "Place a town": they wrap, the title stays whole */
 .head:has(.levers) .h { flex: 1 0 auto; }
 .head .levers { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; }
+/* laptop: the dots table beside the board carries Odds / Weighted / Advisor, so the panel doesn't repeat them
+   (Tim 2026-11-25: "the weighted and advisor switches are duplicated. just remove all of the top 3 switches") */
+@media (min-width: 900px) { #panel .levers { display: none; } }
+.dots .dw { flex-wrap: wrap; row-gap: 4px; }
 @media (max-width: 360px) { .levers, .levers-line { gap: 8px; } .levers-line #cancelMode { display: none; } .odds-lever { gap: 4px; } }
 .odds-lever { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .switch.sm { display: inline-block; width: 34px; height: 20px; }

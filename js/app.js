@@ -1017,7 +1017,7 @@ function dotsHTML(c, cards) {
     const vs = pl[i].map(val);
     return `<div class="dr"><span class="dn" title="${esc(g.players[i].name)}"><i class="pc" style="background:${colorOf(i)}"></i><small>${towns[i]}</small></span>${vs.map(x => cell(x)).join('')}${cell(vs.reduce((a, b) => a + b, 0), ' all')}${cards ? `<span class="dc cards" aria-label="cards in hand">${held(i)}</span>` : ''}</div>`;
   }).join('');
-  return `<div class="dots${cards ? ' wc' : ''}${w ? ' wt' : ''}"><div class="dw">${wLevers()}</div>${head}${table}${rows}</div>`;
+  return `<div class="dots${cards ? ' wc' : ''}${w ? ' wt' : ''}"><div class="dw">${lever('spotOdds', 'Odds')}${wLevers()}</div>${head}${table}${rows}</div>`;
 }
 // laptop column under the action panel: dots table, then the dice chart, which takes whatever height is
 // left so the column never scrolls. The history box is gone (Tim 2026-11-24: "I don't think the table
