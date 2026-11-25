@@ -33,7 +33,8 @@ const app = {
   net: null, netBusy: false, botTimer: null, busyAnim: false, give: [0, 0, 0, 0, 0], get: [0, 0, 0, 0, 0], discard: [0, 0, 0, 0, 0],
 };
 const RES_NAME = ['Wood', 'Brick', 'Sheep', 'Wheat', 'Ore'];
-const RES_COL = ['#3f7d3a', '#b55a3c', '#8fbf5a', '#e2b845', '#8a929b'];
+const ART = window.CatanArt; // shared board art (js/board-art.js), also used by In-person play
+const RES_COL = ART.RES_COL;
 const DEV_NAME = { K: 'Knight', V: 'Victory point', R: 'Road building', P: 'Year of plenty', M: 'Monopoly' };
 const colorOf = p => E.COLORS[p].hex;
 
@@ -126,20 +127,8 @@ const fitFor = g => (g === E.BIG ? { x: -7.5 * U, y: -6.5 * U, w: 15 * U, h: 13 
 let FIT = fitFor(E.G);
 const TK = () => (G === E.BIG ? 1.22 : 1); // number tokens a little larger on the big board so they stay readable
 const view = { vb: Object.assign({}, FIT), sig: '' };
-function patterns() {
-  // original tile prints: pines, brick courses, grazing dots, wheat rows, rock facets, dunes
-  return `<defs>
-  <pattern id="pt0" width="20" height="18" patternUnits="userSpaceOnUse"><rect width="20" height="18" fill="#3f7d3a"/><path d="M5 3l4 8H1zM15 9l4 8h-8z" fill="#2c5f2a"/><path d="M5 11v2M15 17v1" stroke="#5a3b22" stroke-width="1.4"/></pattern>
-  <pattern id="pt1" width="16" height="10" patternUnits="userSpaceOnUse"><rect width="16" height="10" fill="#b55a3c"/><path d="M0 .5h16M0 5.5h16M4 0v5M12 5v5" stroke="#8c3e27" stroke-width="1.1"/></pattern>
-  <pattern id="pt2" width="22" height="18" patternUnits="userSpaceOnUse"><rect width="22" height="18" fill="#8fbf5a"/><ellipse cx="6" cy="6" rx="3.6" ry="2.6" fill="#f4f1e6"/><circle cx="9.4" cy="5.2" r="1.3" fill="#3b3b3b"/><ellipse cx="16" cy="14" rx="3.2" ry="2.3" fill="#f4f1e6"/><circle cx="19" cy="13.3" r="1.2" fill="#3b3b3b"/><path d="M1 16l1-2M12 4l1-2" stroke="#6f9f42" stroke-width="1"/></pattern>
-  <pattern id="pt3" width="10" height="14" patternUnits="userSpaceOnUse"><rect width="10" height="14" fill="#e2b845"/><path d="M3 14V4M8 12V2" stroke="#b78b26" stroke-width="1.2"/><path d="M3 4l-1.6-2M3 4l1.6-2M8 2l-1.4-1.8M8 2l1.4-1.8" stroke="#b78b26" stroke-width="1"/></pattern>
-  <pattern id="pt4" width="24" height="16" patternUnits="userSpaceOnUse"><rect width="24" height="16" fill="#8a929b"/><path d="M2 15l7-11 7 11zM13 15l5-8 5 8z" fill="#6c737c"/><path d="M7.2 6.8L9 4l1.8 2.8zM16.8 9.6L18 7l1.4 2.6z" fill="#e9edf0"/></pattern>
-  <pattern id="pt5" width="26" height="12" patternUnits="userSpaceOnUse"><rect width="26" height="12" fill="#dcc48e"/><path d="M0 8q6.5-5 13 0t13 0" fill="none" stroke="#c4a76b" stroke-width="1.2"/></pattern>
-  <radialGradient id="tileShade" cx="50%" cy="38%" r="65%"><stop offset="0" stop-color="#fff" stop-opacity=".14"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></radialGradient>
-  <radialGradient id="seaG" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#4f93b8"/><stop offset="1" stop-color="#2f6d92"/></radialGradient>
-  <pattern id="waves" width="34" height="14" patternUnits="userSpaceOnUse"><path d="M0 9q8.5-6 17 0t17 0" fill="none" stroke="#bfe0f0" stroke-opacity=".18" stroke-width="1.2"/></pattern>
-  </defs>`;
-}
+// original tile prints: pines, brick courses, grazing dots, wheat rows, rock facets, dunes (js/board-art.js)
+const patterns = ART.patterns;
 function drawStatic(g) {
   const sig = g.hexRes.join() + '|' + g.hexNum.join() + '|' + g.ports.map(p => p.type).join();
   if (view.sig === sig) return;
@@ -179,7 +168,7 @@ function drawStatic(g) {
 }
 function house(x, y, s, cls, col) {
   const k = s * U;
-  return `<path class="${cls}" style="fill:${col}" d="M${x - k},${y + k * .75}V${y - k * .15}L${x},${y - k * .95}L${x + k},${y - k * .15}V${y + k * .75}Z"/>`;
+  return `<path class="${cls}" style="fill:${col}" d="${ART.houseD(x, y, k)}"/>`;
 }
 function city(x, y, col) {
   const k = 0.36 * U;
@@ -211,7 +200,7 @@ function drawLive(c) {
   if (S.spotOdds && hl.kind !== 'settle') g.vOwner.forEach((o, v) => {
     if (!openCorner(g, v)) return;
     const [x, y] = pt(v), odds = spotPips(g, v, wNow), txt = String(odds);
-    h += `<g class="odds-p"><circle cx="${x}" cy="${y}" r="${0.26 * U}" class="hl-c" style="stroke:rgba(0,0,0,.45);stroke-width:1.5;fill:hsl(${Math.round(Math.max(0, Math.min(1, (odds - 3) / 9)) * 120)},70%,80%)"/><text x="${x}" y="${y + (txt.length > 2 ? 0.1 : 0.12) * U}" class="hl-t${txt.length > 2 ? ' long' : ''}">${txt}</text></g>`;
+    h += `<g class="odds-p"><circle cx="${x}" cy="${y}" r="${0.26 * U}" class="hl-c" style="stroke:rgba(0,0,0,.45);stroke-width:1.5;fill:${ART.oddsFill(odds)}"/><text x="${x}" y="${y + (txt.length > 2 ? 0.1 : 0.12) * U}" class="hl-t${txt.length > 2 ? ' long' : ''}">${txt}</text></g>`;
   });
   hl.hexes.forEach(i => { const P = hexPts(i).map(q => q.join(',')).join(' '); h += `<polygon points="${P}" class="hl-hex" data-h="${i}"/>`; });
   hl.edges.forEach(e => {
@@ -222,7 +211,7 @@ function drawLive(c) {
     const [x, y] = pt(v);
     // a number only where a town may really go: empty corner, no building one road away
     const odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotPips(g, v, wNow) : '';
-    const fill = odds !== '' ? `;fill:hsl(${Math.round(Math.max(0, Math.min(1, (odds - 3) / 9)) * 120)},70%,80%)` : '';
+    const fill = odds !== '' ? `;fill:${ART.oddsFill(odds)}` : '';
     const txt = String(odds);
     h += `<g class="hl-v" data-v="${v}"><circle cx="${x}" cy="${y}" r="${0.3 * U}" class="hl-c" style="stroke:${colorOf(me)}${fill}"/>${odds !== '' ? `<text x="${x}" y="${y + (txt.length > 2 ? 0.1 : 0.13) * U}" class="hl-t${txt.length > 2 ? ' long' : ''}">${txt}</text>` : ''}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
   });
@@ -487,13 +476,7 @@ function showGains(g, me, gain, num) {
 
 // ------------------------------------------------------------ small art
 const resIcon = r => `<svg viewBox="0 0 20 20" class="ri" aria-hidden="true">${RES_ICON[r]}</svg>`;
-const RES_ICON = [
-  '<path d="M10 2l6 10H4z" fill="#2c5f2a"/><path d="M10 7l6 9H4z" fill="#3f7d3a"/><rect x="9" y="15" width="2" height="4" fill="#5a3b22"/>',
-  '<rect x="2" y="5" width="16" height="10" fill="#b55a3c"/><path d="M2 10h16M8 5v5M13 10v5" stroke="#7d3522" stroke-width="1.3"/>',
-  '<ellipse cx="9" cy="11" rx="6.5" ry="4.6" fill="#f4f1e6"/><circle cx="15.5" cy="9" r="2.4" fill="#3b3b3b"/><path d="M6 15v3M11 15v3" stroke="#3b3b3b" stroke-width="1.4"/>',
-  '<path d="M10 19V5M6 18V8M14 18V8" stroke="#b78b26" stroke-width="1.6"/><ellipse cx="10" cy="4.5" rx="1.6" ry="3" fill="#e2b845"/><ellipse cx="6" cy="7.5" rx="1.4" ry="2.6" fill="#e2b845"/><ellipse cx="14" cy="7.5" rx="1.4" ry="2.6" fill="#e2b845"/>',
-  '<path d="M1 18l7-13 5 7 2-3 4 9z" fill="#6c737c"/><path d="M6.3 8.2L8 5l2 2.8z" fill="#e9edf0"/>',
-];
+const RES_ICON = ART.RES_ICON;
 const costHTML = cost => cost.map((n, r) => Array(n).fill(`<i class="cdot" style="background:${RES_COL[r]}"></i>`).join('')).join('');
 const vpOf = (g, p, mine) => E.publicVP(g, p) + (mine || g.phase === 'over' ? g.players[p].vpCards || 0 : 0);
 
@@ -881,7 +864,7 @@ function renderMain() {
   $('#playView').hidden = app.tab !== 'play';
   $('#trackerView').hidden = app.tab !== 'tracker';
   $('#settingsView').hidden = app.tab !== 'settings';
-  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html'; return; }
+  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=2'; return; }
   if (app.tab === 'settings') { renderSettings(); return; }
   const c = current();
   const lobby = app.net && (app.net.status === 'lobby' || app.net.status === 'joining');

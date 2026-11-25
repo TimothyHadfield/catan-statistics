@@ -23,12 +23,12 @@ const snap = () => page.evaluate(() => ({
   tiles: [...document.querySelectorAll('[data-board] svg > g > polygon')].map(p => p.getAttribute('fill')).join(),
   numbers: [...document.querySelectorAll('[data-board] svg > g > text')].map(t => t.textContent).join(),
   rows: [...document.querySelectorAll('[data-summary] [data-row]')].map(r => r.innerText.replace(/\s+/g, ' ')),
-  ports: [...document.querySelectorAll('[data-vertex] rect')].map(r => r.parentNode.parentNode.dataset.vertex + r.getAttribute('fill')).sort().join(),
+  ports: [...document.querySelectorAll('[data-port]')].map(g => g.dataset.at + g.dataset.port).sort().join(),
   roads: document.querySelectorAll('[data-edge] line[stroke-width="6"]').length,
   total: document.querySelector('[data-total]').textContent,
   counts: [...document.querySelectorAll('[data-roll]')].map(b => b.innerText.replace(/\s+/g, ' ')).join('|'),
   locked: !!document.querySelector('[data-act=edit]'),
-  player: document.querySelector('[data-players] .ring-black')?.getAttribute('aria-label'),
+  player: document.querySelector('[data-players] .ip-col[aria-pressed="true"]')?.getAttribute('aria-label'),
 }));
 
 await page.click('[data-act=random]');
