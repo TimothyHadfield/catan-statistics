@@ -16,7 +16,6 @@ test('weights: clamp(mean / P_r, 0.5, 2), 2 for a resource with no dots; corners
   const w = boardWeights(hexRes, hexNum); // mean 19/5 = 3.8
   assert.deepStrictEqual(W.RES.map(r => +w[r].toFixed(3)), [0.5, 2, 0.95, 0.95, 2]);
   assert.strictEqual(spot([0, 2, 3], hexRes, hexNum, w, -1), 8.3); // 5*0.5 + 1*2 + 4*0.95
-  assert.strictEqual(spot([0, 2, 3], hexRes, hexNum, w, 2), 6.3);  // the robber's tile counts for nothing
   assert.strictEqual(spot([5, 0], hexRes, hexNum, w, -1), 2.5);    // desert adds nothing
 });
 

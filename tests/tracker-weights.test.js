@@ -29,6 +29,37 @@ test('weights on a real random board: totals 58 pips, scarce resource weighs mor
   }
 });
 
+test('personal weights: need (build costs, minus what you already get) and what is still open', () => {
+  const zero = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+  const even = { wood: 12, brick: 12, sheep: 12, wheat: 12, ore: 12 };
+  // nothing yet, everything equally open: wheat and ore (4 each in road+town+city+card) beat wood/brick/sheep (2)
+  let w = W.personal(zero, even, even);
+  assert.ok(w.wheat > w.wood && near(w.wheat, w.ore) && near(w.wood, w.brick) && near(w.wood, w.sheep));
+  // supply = 12*3/NEED: wood 18, wheat 9; mean = (18*3 + 9*2)/5 = 14.4 -> wood 0.8, wheat 1.6
+  assert.ok(near(w.wood, 0.8) && near(w.wheat, 1.6));
+  // already getting lots of wheat: wheat drops below ore
+  w = W.personal({ ...zero, wheat: 9 }, even, even);
+  assert.ok(w.wheat < w.ore);
+  // little ore left on open corners: ore counts more than wheat
+  w = W.personal(zero, { ...even, ore: 3 }, even);
+  assert.ok(w.ore > w.wheat);
+  // no ore on any open corner: 2 (like a resource missing from the board)
+  w = W.personal(zero, { ...even, ore: 0 }, even);
+  assert.strictEqual(w.ore, 2);
+  // every corner taken: fall back to the whole board
+  assert.deepStrictEqual(W.personal(zero, zero, even), W.personal(zero, even, even));
+  W.RES.forEach(r => assert.ok(w[r] >= 0.5 && w[r] <= 2));
+});
+
+test('openDots: dots per resource summed over open corners only', () => {
+  const corners = [
+    { open: true, hexes: [{ resource: 'wood', pips: 5 }, { resource: 'ore', pips: 2 }] },
+    { open: false, hexes: [{ resource: 'wood', pips: 5 }] },
+    { open: true, hexes: [{ resource: 'wood', pips: 5 }] },
+  ];
+  assert.deepStrictEqual(W.openDots(corners), { wood: 10, brick: 0, sheep: 0, wheat: 0, ore: 2 });
+});
+
 test('vertex sum and number format', () => {
   const w = { wood: 2, brick: 0.5, sheep: 1, wheat: 10 / 13, ore: 1 };
   assert.ok(near(W.weightedSum([{ resource: 'wood', pips: 5 }, { resource: 'brick', pips: 4 }, { resource: 'wheat', pips: 3 }], w), 10 + 2 + 30 / 13));

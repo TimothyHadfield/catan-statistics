@@ -13,8 +13,8 @@
     <script src="https://unpkg.com/@babel/standalone@8.0.7/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <script src="js/engine.js?v=1"></script>
-    <script src="js/tracker-board.js?v=3"></script>
-    <script src="js/weights.js?v=1"></script>
+    <script src="js/tracker-board.js?v=4"></script>
+    <script src="js/weights.js?v=2"></script>
     <script src="js/undo.js?v=1"></script>
     <style>
         html, body { margin: 0; height: 100%; }
@@ -102,6 +102,7 @@ const [stage, setStage] = useState(saved ? saved.stage : 'start');
 const [history, setHistory] = useState(saved ? saved.history : []);
 const [hexes, setHexes] = useState(saved ? saved.hexes : getDefaultHexes());
 const [weighted, setWeighted] = useState(saved ? saved.weighted : false);
+const [mine, setMine] = useState(saved ? saved.mine : false);
 const [selectedHex, setSelectedHex] = useState(null);
 const [settlements, setSettlements] = useState(saved ? saved.settlements : []);
 const [roads, setRoads] = useState(saved ? saved.roads : []);
@@ -249,7 +250,15 @@ return b;
 // Weighted: scarce resources count more per pip (js/weights.js)
 const W = window.TrackerWeights;
 const boardTotals = useMemo(() => W.totals(hexes), [hexes]);
-const wts = useMemo(() => weighted ? W.weights(boardTotals) : null, [boardTotals, weighted]);
+// Mine: weights for the selected colour: what it already gets, and what is left on open corners
+const wts = useMemo(() => {
+if (!weighted) return null;
+if (!mine) return W.weights(boardTotals);
+const own = {wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0};
+settlements.forEach(s => { const v = vertices[s.vertex]; if (v && s.player === selectedPlayer) v.adjacentHexes.forEach(h => { own[h.resource] += h.pips; }); });
+const open = W.openDots(Object.entries(vertices).map(([k, v]) => ({open: !blocked.has(k), hexes: v.adjacentHexes})));
+return W.personal(own, open, boardTotals);
+}, [boardTotals, weighted, mine, settlements, vertices, blocked, selectedPlayer]);
 const wOf = r => (wts ? wts[r] : 1);
 const vertexValue = v => W.weightedSum(v.adjacentHexes, wts);
 
@@ -274,7 +283,7 @@ lockBoard(b.hexes);
 const manualBoard = () => { resetBoard(); setResumable(false); setStage('manual'); };
 
 // everything the ◀ button can take back, and everything that is saved
-const snap = {stage, hexes, settlements, roads, ports, history, player: selectedPlayer, weighted, resumable};
+const snap = {stage, hexes, settlements, roads, ports, history, player: selectedPlayer, weighted, mine, resumable};
 const snapKey = JSON.stringify(snap);
 const [past, setPast] = useState([]);
 const prevSnap = useRef(snap);
@@ -295,7 +304,7 @@ const s = r.state;
 restoring.current = !window.TrackerUndo.same(s, snap);
 setPast(r.stack);
 setStage(s.stage); setHexes(s.hexes); setSettlements(s.settlements); setRoads(s.roads); setPorts(s.ports);
-setHistory(s.history); setSelectedPlayer(s.player); setWeighted(s.weighted); setResumable(s.resumable);
+setHistory(s.history); setSelectedPlayer(s.player); setWeighted(s.weighted); setMine(!!s.mine);setResumable(s.resumable);
 if (s.stage !== 'manual') { setAutoPlaceMode(false); setAutoPlaceStep(0); }
 setSelectedHex(null);
 };
@@ -547,6 +556,12 @@ const summary = isLocked && (
 <button role="switch" aria-checked={weighted} onClick={() => setWeighted(!weighted)} className={`relative w-8 h-[18px] lg:w-10 lg:h-6 rounded-full transition-colors ${weighted ? 'bg-amber-700' : 'bg-gray-300'}`} data-act="weighted">
 <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] lg:w-5 lg:h-5 rounded-full bg-white shadow transition-transform ${weighted ? 'translate-x-[14px] lg:translate-x-4' : ''}`}/>
 </button>
+{weighted && (<>
+<span className="ml-2">Mine</span>
+<button role="switch" aria-checked={mine} onClick={() => setMine(!mine)} className={`relative w-8 h-[18px] lg:w-10 lg:h-6 rounded-full transition-colors ${mine ? 'bg-amber-700' : 'bg-gray-300'}`} data-act="mine" title="Weights for the selected colour: what it still needs and what is left on open corners">
+<span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] lg:w-5 lg:h-5 rounded-full bg-white shadow transition-transform ${mine ? 'translate-x-[14px] lg:translate-x-4' : ''}`}/>
+</button>
+</>)}
 </label>
 <div className="flex items-center gap-0.5 pb-0.5">
 <span className="w-9 lg:w-16"/>

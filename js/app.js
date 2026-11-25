@@ -17,7 +17,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} },
 };
-const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, weighted: false, netName: '',
+const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, weighted: false, mine: false, netName: '',
   friendly: false, balanced: false, vp: 10 }, store.get('catan.settings', {}));
 while (S.seats.length < 6) S.seats.push('medium');
 if (![3, 4, 5, 6].includes(S.n)) S.n = 4;
@@ -96,6 +96,7 @@ const WHY = {
   game: ['How to play', 'Roll, collect from tiles next to your towns, build. Road = wood + brick. Town = wood, brick, sheep, wheat. City = 2 wheat + 3 ore. Card = sheep, wheat, ore. First to 10 points wins. A 7 moves the robber: anyone with more than 7 cards gives back half.'],
   odds: ['Spot odds', 'Numbers on open corners add up the dots of the tiles around them (a 6 or 8 is 5 dots, a 2 or 12 is 1). Each dot is one roll in 36, the same count as In-person play.'],
   weighted: ['Weighted', 'Corner numbers count a dot of a scarce resource for more and a common one for less. Each resource weighs (average dots per resource) ÷ (its dots on this board), between 0.5 and 2.'],
+  mine: ['Mine', 'With Weighted on, weights fit you instead of the whole board: a resource counts more when you get little of it, when building needs a lot of it (one road + town + city + card: wheat and ore 4 each, the rest 2), and when little of it is left on corners that are still open. Taken corners and corners next to a town don\'t count.'],
   online: ['Online','Make a room with an "Online friend" seat, then friends type its code here. Seats nobody takes become computers.'],
   trade: ['Trading', 'Bank: 4 of one for 1. A 3:1 harbour or a 2:1 harbour of that kind is cheaper once you have a town on it. Offers to players: computers say yes when the deal helps them and you are not about to win.'],
   strong: ['How strong?', 'Measured in computer-only games in node; see Settings.'],
@@ -205,11 +206,11 @@ function drawLive(c) {
     h += g.vLevel[v] === 2 ? city(x, y, colorOf(o)) : house(x, y, 0.27, 'bld', colorOf(o));
   });
   // what I may tap now
-  const hl = targets(c);
+  const hl = targets(c), wNow = weightsFor(g, me);
   // Odds on: when not placing a town, every open corner still shows its number (look-only, taps pass through)
   if (S.spotOdds && hl.kind !== 'settle') g.vOwner.forEach((o, v) => {
     if (!openCorner(g, v)) return;
-    const [x, y] = pt(v), odds = spotPips(g, v), txt = String(odds);
+    const [x, y] = pt(v), odds = spotPips(g, v, wNow), txt = String(odds);
     h += `<g class="odds-p"><circle cx="${x}" cy="${y}" r="${0.26 * U}" class="hl-c" style="stroke:rgba(0,0,0,.45);stroke-width:1.5;fill:hsl(${Math.round(Math.max(0, Math.min(1, (odds - 3) / 9)) * 120)},70%,80%)"/><text x="${x}" y="${y + (txt.length > 2 ? 0.1 : 0.12) * U}" class="hl-t${txt.length > 2 ? ' long' : ''}">${txt}</text></g>`;
   });
   hl.hexes.forEach(i => { const P = hexPts(i).map(q => q.join(',')).join(' '); h += `<polygon points="${P}" class="hl-hex" data-h="${i}"/>`; });
@@ -220,7 +221,7 @@ function drawLive(c) {
   hl.verts.forEach(v => {
     const [x, y] = pt(v);
     // a number only where a town may really go: empty corner, no building one road away
-    const odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotPips(g, v) : '';
+    const odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotPips(g, v, wNow) : '';
     const fill = odds !== '' ? `;fill:hsl(${Math.round(Math.max(0, Math.min(1, (odds - 3) / 9)) * 120)},70%,80%)` : '';
     const txt = String(odds);
     h += `<g class="hl-v" data-v="${v}"><circle cx="${x}" cy="${y}" r="${0.3 * U}" class="hl-c" style="stroke:${colorOf(me)}${fill}"/>${odds !== '' ? `<text x="${x}" y="${y + (txt.length > 2 ? 0.1 : 0.13) * U}" class="hl-t${txt.length > 2 ? ' long' : ''}">${txt}</text>` : ''}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
@@ -230,11 +231,23 @@ function drawLive(c) {
 }
 // a corner's dots; with "Weighted" on, each dot counts by how scarce its resource is on this board
 // (maths shared with In-person play in js/weights.js; engine resources are 0..4 in the same order as W.RES)
-const boardWeights = g => W.weights(W.totals(g.hexRes.map((r, h) => ({ resource: W.RES[r], number: g.hexNum[h] }))));
-const spotPips = (g, v) => (S.weighted
-  ? Math.round(W.weightedSum(G.V[v].hexes.filter(h => h !== g.robber && g.hexRes[h] >= 0).map(h => ({ resource: W.RES[g.hexRes[h]], pips: E.pips(g.hexNum[h]) })), boardWeights(g)))
-  : G.V[v].hexes.reduce((a, h) => a + (h === g.robber ? 0 : E.pips(g.hexNum[h])), 0));
+// "Mine" (with Weighted): weights for one seat from what it already gets and what is left on open corners.
+// The robber's tile always counts (it moves too often to matter; Tim 2026-11-24).
+const boardTot = g => W.totals(g.hexRes.map((r, h) => ({ resource: W.RES[r], number: g.hexNum[h] })));
+const cornerHexes = (g, v) => G.V[v].hexes.filter(h => g.hexRes[h] >= 0).map(h => ({ resource: W.RES[g.hexRes[h]], pips: E.pips(g.hexNum[h]) }));
 const openCorner = (g, v) => g.vOwner[v] < 0 && G.V[v].edges.every(e => G.E[e].v.every(u => g.vOwner[u] < 0));
+function ownDots(g, seat) {
+  const own = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+  g.vOwner.forEach((o, v) => { if (o === seat) cornerHexes(g, v).forEach(h => { own[h.resource] += h.pips * (g.vLevel[v] === 2 ? 2 : 1); }); });
+  return own;
+}
+function weightsFor(g, seat) {
+  if (!S.weighted) return null;
+  if (!S.mine || seat < 0) return W.weights(boardTot(g));
+  const open = W.openDots(g.vOwner.map((_, v) => ({ open: openCorner(g, v), hexes: cornerHexes(g, v) })));
+  return W.personal(ownDots(g, seat), open, boardTot(g));
+}
+const spotPips = (g, v, w) => (w ? Math.round(W.weightedSum(cornerHexes(g, v), w)) : G.V[v].hexes.reduce((a, h) => a + E.pips(g.hexNum[h]), 0));
 
 // my own turn after the roll, or my extra build step (5-6 players) on someone else's turn
 const buildingNow = (g, seat) => (g.phase === 'main' && g.turn === seat) || (g.phase === 'build' && g.build && g.build.queue[0] === seat);
@@ -561,7 +574,9 @@ function offerText(g, o, me) {
 // spot odds on/off right where you place a town (same setting as the Settings switch)
 // plus "Weighted": the same numbers counted by how scarce each resource is (also in Settings)
 const lever = (key, label) => `<label class="odds-lever">${label}<span class="switch sm"><input type="checkbox" data-lever="${key}" ${S[key] ? 'checked' : ''}><span></span></span></label>`;
-const levers = () => `${lever('spotOdds', 'Odds')}${lever('weighted', 'Weighted')}`;
+// "Mine" shows only while Weighted is on
+const wLevers = () => `${lever('weighted', 'Weighted')}${S.weighted ? lever('mine', 'Mine') : ''}`;
+const levers = () => `${lever('spotOdds', 'Odds')}${wLevers()}`;
 function panelHTML(c) {
   const { g, seat } = c, P = g.players[seat], mineTurn = c.toAct.includes(seat) && app.coverFor < 0;
   const head = (t, extra) => `<div class="head"><span class="h">${t}</span>${extra || ''}</div>`;
@@ -798,16 +813,17 @@ function handsHTML(c) {
   }).join('')}</ul>`;
 }
 // dots (probability points) per resource: the board's totals, then each player's from their towns
-// (a city counts twice); the robber's tile counts 0. Weighted on: player dots × weight, Table row shows weights.
+// (a city counts twice); the robber's tile counts too. Weighted on: player dots × weight, Table row shows
+// weights (with Mine: the viewer's own weights).
 function dotsHTML(c, cards) {
   const { g, seat } = c;
   const tot = [0, 0, 0, 0, 0];
   g.hexRes.forEach((r, h) => { if (r >= 0) tot[r] += E.pips(g.hexNum[h]); });
-  const w = S.weighted ? W.weights(W.totals(g.hexRes.map((r, h) => ({ resource: W.RES[r], number: g.hexNum[h] })))) : null;
+  const w = weightsFor(g, seat);
   const pl = g.players.map(() => [0, 0, 0, 0, 0]);
   g.vOwner.forEach((o, v) => {
     if (o < 0) return;
-    G.V[v].hexes.forEach(h => { if (h !== g.robber && g.hexRes[h] >= 0) pl[o][g.hexRes[h]] += E.pips(g.hexNum[h]) * (g.vLevel[v] === 2 ? 2 : 1); });
+    G.V[v].hexes.forEach(h => { if (g.hexRes[h] >= 0) pl[o][g.hexRes[h]] += E.pips(g.hexNum[h]) * (g.vLevel[v] === 2 ? 2 : 1); });
   });
   // same look as In-person play's table: Weighted switch, icon header, bold Table row, then a row per
   // player (colour dot + towns) with grey zeros and a bold "all"; online adds a cards-held column
@@ -822,7 +838,7 @@ function dotsHTML(c, cards) {
     const vs = pl[i].map(val);
     return `<div class="dr"><span class="dn" title="${esc(g.players[i].name)}"><i class="pc" style="background:${colorOf(i)}"></i><small>${towns[i]}</small></span>${vs.map(x => cell(x)).join('')}${cell(vs.reduce((a, b) => a + b, 0), ' all')}${cards ? `<span class="dc cards" aria-label="cards in hand">${held(i)}</span>` : ''}</div>`;
   }).join('');
-  return `<div class="dots${cards ? ' wc' : ''}${w ? ' wt' : ''}"><div class="dw">${lever('weighted', 'Weighted')}</div>${head}${table}${rows}</div>`;
+  return `<div class="dots${cards ? ' wc' : ''}${w ? ' wt' : ''}"><div class="dw">${wLevers()}</div>${head}${table}${rows}</div>`;
 }
 function sideHTML(c) {
   const { g } = c;
@@ -843,6 +859,7 @@ function settingsPanel() {
       <div class="set-row"><span class="grow">Computer speed</span>${seg('speed', [['normal', 'Normal'], ['fast', 'Fast']])}</div>
       <div class="set-row"><span class="grow">Spot odds ${why('odds')}</span><label class="switch"><input type="checkbox" id="oddsSw" ${S.spotOdds ? 'checked' : ''}><span></span></label></div>
       <div class="set-row"><span class="grow">Weighted ${why('weighted')}</span><label class="switch"><input type="checkbox" data-sw="weighted" ${S.weighted ? 'checked' : ''}><span></span></label></div>
+      <div class="set-row"><span class="grow">Mine ${why('mine')}</span><label class="switch"><input type="checkbox" data-sw="mine" ${S.mine ? 'checked' : ''}><span></span></label></div>
     </div>
     <div class="phase"><div class="head"><span class="h">House rules</span></div>
       <div class="set-row"><span class="grow">Friendly robber<span class="sub">Robber can't touch a player on 2 points or fewer.</span></span><label class="switch"><input type="checkbox" data-sw="friendly" ${S.friendly ? 'checked' : ''}><span></span></label></div>

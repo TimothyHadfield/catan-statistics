@@ -262,7 +262,7 @@ button.rc { font: inherit; padding: 0; cursor: pointer; }
 .hands .hc.zero { opacity: .4; }
 /* dots table: same layout as In-person play's (Weighted switch, icons, bold Table row, player rows) */
 .dots { font-size: 15px; font-variant-numeric: tabular-nums; }
-.dots .dw { display: flex; padding-bottom: 4px; }
+.dots .dw { display: flex; gap: 12px; padding-bottom: 4px; }
 .dots .dw .odds-lever { color: var(--accent-warm); font-size: 13px; }
 .dots .dr { display: grid; grid-template-columns: 42px repeat(6, 1fr); align-items: center; gap: 2px; padding: 3px 0; border-top: 1px solid rgba(42,48,66,.6); }
 .dots.wc .dr { grid-template-columns: 42px repeat(6, 1fr) 30px; }

@@ -47,7 +47,7 @@ test('save, reload, restore: board, pieces, harbours, rolls and locked state com
   const game = { stage: 'locked', hexes, ports,
     settlements: [{ vertex: k0, player: 'red' }, { vertex: TB.cornerKey(hexes[2], 3), player: 'blue' }],
     roads: [{ edge: [k0, k1].sort().join('|'), player: 'red' }],
-    history: [6, 8, 7, 5, 9, 7, 4, 10, 6, 3, 11, 7, 8, 2, 12, 9, 6, 5], player: 'blue', weighted: true };
+    history: [6, 8, 7, 5, 9, 7, 4, 10, 6, 3, 11, 7, 8, 2, 12, 9, 6, 5], player: 'blue', weighted: true, mine: true };
   assert.strictEqual(TB.save(game, store), true);
   const back = JSON.parse(JSON.stringify(TB.load(store))); // what a fresh page would read
   assert.deepStrictEqual(back, JSON.parse(JSON.stringify(game)));

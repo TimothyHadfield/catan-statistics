@@ -62,7 +62,7 @@
     try {
       const s = store || getStore(); if (!s) return false;
       s.setItem(SAVE_KEY, JSON.stringify({ v: 1, stage: data.stage, hexes: data.hexes, settlements: data.settlements,
-        roads: data.roads, ports: data.ports, history: data.history, player: data.player, weighted: !!data.weighted }));
+        roads: data.roads, ports: data.ports, history: data.history, player: data.player, weighted: !!data.weighted, mine: !!data.mine }));
       return true;
     } catch (e) { return false; }
   }
@@ -83,6 +83,7 @@
         history: arr(d.history, n => ROLLS.includes(n)),
         player: isStr(d.player) ? d.player : 'red',
         weighted: d.weighted === true,
+        mine: d.mine === true,
       };
     } catch (e) { return null; }
   }
