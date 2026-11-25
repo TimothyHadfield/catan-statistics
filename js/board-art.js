@@ -38,5 +38,20 @@
   // never go there anyways". all = the "Red odds" setting.
   const ODDS_MIN = 7;
   const oddsShown = (odds, all) => !!all || Math.round(odds) >= ODDS_MIN;
-  root.CatanArt = { RES_COL, RES_ICON, DEFS, patterns, houseD, oddsFill, ODDS, oddsBadge, ODDS_MIN, oddsShown };
+  // dice chart: expected % for 2..12 (n/36) drawn as one smooth line over the rolled bars. Tim 2026-11-25:
+  // "a smooth line showing the expected curve of the dice probability rather than a bar for each number".
+  // curveD = SVG path in a 0..11 x 0..100 box (column i centred at i+0.5), Catmull-Rom through every point
+  // so it still passes through the exact n/36 values.
+  const DICE_EXP = [1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1].map(k => k / 36 * 100);
+  const curveD = (vals, max) => {
+    const P = vals.map((v, i) => [i + 0.5, 100 - v / max * 100]), f = p => p.map(x => +x.toFixed(2)).join(',');
+    let d = 'M' + f(P[0]);
+    for (let i = 0; i < P.length - 1; i++) {
+      const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2;
+      d += ` C${f([p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6])} ${f([p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6])} ${f(p2)}`;
+    }
+    return d;
+  };
+  const diceCurve = max => `<svg class="curve" viewBox="0 0 11 100" preserveAspectRatio="none" aria-hidden="true"><path d="${curveD(DICE_EXP, max)}"/></svg>`;
+  root.CatanArt = { RES_COL, RES_ICON, DEFS, patterns, houseD, oddsFill, ODDS, oddsBadge, ODDS_MIN, oddsShown, DICE_EXP, curveD, diceCurve };
 })(typeof window !== 'undefined' ? window : globalThis);

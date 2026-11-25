@@ -687,7 +687,7 @@ function mineHTML(c) {
   };
   return `<div class="hand">
     ${P.res.map(card).join('')}
-    <div class="myvp" style="--pc:${colorOf(seat)}" title="Your points"><b>${vpOf(g, seat, true)}</b><span>${g.rules.vp !== 10 ? 'of ' + g.rules.vp : 'pts'}</span></div>
+    <div class="myvp" style="--pc:${colorOf(seat)}" title="Your points"><b>${vpOf(g, seat, true)}</b><span>${g.rules.vp !== 10 ? 'of ' + g.rules.vp : 'pts'}</span>${P.knights ? `<span class="mykn" title="Knights played">⚔${P.knights}</span>` : ''}</div>
   </div>
   ${devBtns ? `<div class="devs">${devBtns}</div>` : ''}`;
 }
@@ -947,11 +947,10 @@ function bindTrade(sh) {
 
 function chartHTML(g) {
   const tot = g.rolls.reduce((a, b) => a + b, 0) || 1, max = Math.max(17, ...g.rolls.map(n => n / tot * 100));
-  const bars = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => {
-    const act = g.rolls[n] / tot * 100, th = (6 - Math.abs(7 - n)) / 36 * 100;
-    return `<div class="bar"><div class="bars"><i class="a" style="height:${act / max * 100}%"></i><i class="t" style="height:${th / max * 100}%"></i></div><b>${n}</b><span>${g.rolls[n]}</span></div>`;
-  }).join('');
-  return `<div class="chart">${bars}</div><div class="small muted"><i class="key a"></i> rolled % <i class="key t"></i> expected (n/36, as in In-person play) · ${g.rolls.reduce((a, b) => a + b, 0)} rolls</div>`;
+  const N = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const bars = N.map(n => `<i class="a" style="height:${g.rolls[n] / tot * 100 / max * 100}%"></i>`).join('');
+  const lbls = N.map(n => `<div class="bar"><b>${n}</b><span>${g.rolls[n]}</span></div>`).join('');
+  return `<div class="chart"><div class="plot">${bars}${ART.diceCurve(max)}</div><div class="lbls">${lbls}</div></div><div class="small muted"><i class="key a"></i> rolled % <i class="key t"></i> expected (n/36, as in In-person play) · ${g.rolls.reduce((a, b) => a + b, 0)} rolls</div>`;
 }
 // phone: the dice box, with everyone's cards under it; kept current by render() while open
 const diceLiveHTML = c => `${chartHTML(c.g)}<div class="sep"></div>${dotsHTML(c)}<div class="sep"></div>${handsHTML(c)}`;
@@ -1053,7 +1052,7 @@ function renderMain() {
   $('#playView').hidden = app.tab !== 'play';
   $('#trackerView').hidden = app.tab !== 'tracker';
   $('#settingsView').hidden = app.tab !== 'settings';
-  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=7'; return; }
+  if (app.tab === 'tracker') { const f = $('#trackerFrame'); if (!f.src) f.src = 'tracker.html?v=8'; return; }
   if (app.tab === 'settings') { renderSettings(); return; }
   const c = current();
   const lobby = app.net && (app.net.status === 'lobby' || app.net.status === 'joining');

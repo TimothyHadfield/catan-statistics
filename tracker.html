@@ -18,10 +18,10 @@
     <script src="js/weights.js?v=3"></script>
     <script src="js/advisor.js?v=1"></script>
     <script src="js/undo.js?v=1"></script>
-    <script src="js/board-art.js?v=3"></script>
+    <script src="js/board-art.js?v=4"></script>
     <!-- same look as Online play: its colours, panels, buttons, switches and board art -->
     <link rel="stylesheet" href="css/table.css?v=1">
-    <link rel="stylesheet" href="css/style.css?v=14">
+    <link rel="stylesheet" href="css/style.css?v=15">
     <style>
         html, body { margin: 0; height: 100%; }
         body { overflow: hidden; -webkit-tap-highlight-color: transparent; background: #5a3820; }
@@ -97,12 +97,8 @@ const DiceBars = ({ rolls, total }) => {
     return (
         <div data-chart>
             <div className="chart">
-                {NUMS.map(n => (
-                    <div key={n} className="bar" title={`${n}: ${rolls[n]} of ${total}`}>
-                        <div className="bars"><i className="a" style={{height: `${pct(n) / top * 100}%`}}/><i className="t" style={{height: `${theoreticalProb[n] / top * 100}%`}}/></div>
-                        <b>{n}</b>
-                    </div>
-                ))}
+                <div className="plot" dangerouslySetInnerHTML={{__html: NUMS.map(n => `<i class="a" title="${n}: ${rolls[n]} of ${total}" style="height:${pct(n) / top * 100}%"></i>`).join('') + window.CatanArt.diceCurve(top)}}/>
+                <div className="lbls">{NUMS.map(n => <div key={n} className="bar"><b>{n}</b></div>)}</div>
             </div>
             <div className="small muted whitespace-nowrap"><i className="key a"/> actual <i className="key t"/> exp · <span data-total>{total} rolls</span></div>
         </div>
