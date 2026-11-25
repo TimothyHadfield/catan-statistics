@@ -1,7 +1,7 @@
 # Catan: progress
 
 ## START HERE
-Last updated 2026-11-25 (48/48 `node --test "tests/*.test.*"`; live b4db8b7). Versions now style.css v13, app.js v18, board-art v3, engine v4, ai v3, tracker.html?v=6. In flight: branch `advisor` (Tim: an "Advisor" odds setting: personal weights + diversity + blocking opponents), worktree C:/Users/timha/AppData/Local/Temp/claude/wt/catan-advisor. Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
+Last updated 2026-11-25 (53/53 `node --test "tests/*.test.*"`; Advisor merged). Versions now style.css v14, app.js v19, advisor v1, board-art v3, engine v4, ai v3, tracker.html?v=7. Trap: builders twice left stray edits in the MAIN checkout (engine.js, tests/advisor.test.js); check `git status` before merging a branch. Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
 
 ## Goal right now
 Catan is a playable base game vs computer, 3–6 players, with online rooms (friend codes, ON since 2026-10-27, Tim's go: "enable it to all games for now and we can disable it later if it becomes too much"). Wave 3 (2026-10-28, Tim: "Just make the games better") added 5–6 players, house-rule options and Learn videos.
