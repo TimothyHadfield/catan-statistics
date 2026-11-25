@@ -544,7 +544,11 @@
     g.players.forEach((P, i) => { P.res = sum(st.players[i].res); P.dev = st.players[i].dev.length; P.fresh = st.players[i].fresh.length; P.vpCards = 0; });
     g.log.forEach(e => { if (e.k === 'robber') e.r = e.from >= 0 ? -2 : -1; });
     if (g.phase !== 'over') g.winner = -1;
-    else g.players.forEach((P, i) => { P.vpCards = st.players[i].vpCards; });
+    else {
+      // game over: everything is shown, so the end screen can say how close it was (Tim 2026-11-25)
+      g.players.forEach((P, i) => { P.vpCards = st.players[i].vpCards; });
+      g.hands = st.players.map(P => ({ res: P.res.slice(), dev: P.dev.slice().sort() }));
+    }
     return g;
   }
 

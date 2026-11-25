@@ -46,6 +46,17 @@ main { min-height: 0; overflow: hidden; position: relative; }
 body.at-table .board-wrap { max-height: calc(100dvh - var(--head) - var(--tabh) - 268px); }
 /* end screen: the board keeps its in-game size (it used to shrink here, Tim 2026-11-25: "zooms out really far"); one-line score rows */
 .phase .seat.endrow { min-height: 0; padding: 4px 0; } .seat.endrow .bd { display: inline; margin-left: 6px; }
+/* end screen: what each player held (hidden points, cards, dev cards) */
+.seat.endrow .eh { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; margin-top: 2px; color: var(--muted); font-size: 11.5px; }
+.seat.endrow .eh .hc { display: inline-flex; align-items: center; gap: 1px; } .seat.endrow .eh .hc .ri { width: 14px; height: 14px; }
+.seat.endrow .eh .hc b { color: var(--text, inherit); font-size: 12px; }
+.seat.endrow .eh .hv { font-weight: 700; color: var(--accent-warm); } .seat.endrow .eh .hv.zero { color: var(--muted); font-weight: 400; }
+.seat.endrow .eh .dv { padding: 0 5px; border-radius: 4px; background: rgba(255,255,255,.08); }
+/* phone: one line per player (name + what they held); the towns/cities breakdown shows on laptop only */
+@media (max-width: 899px) {
+  .seat.endrow > .grow { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
+  .seat.endrow .bd { display: none; } .seat.endrow .eh { margin-top: 0; }
+}
 #board { width: 100%; height: 100%; display: block; user-select: none; -webkit-user-select: none; touch-action: none; overflow: visible; }
 .zoom-bar { position: absolute; left: 2px; top: 2px; display: grid; grid-template-columns: 34px 34px; grid-template-areas: "in fit" "out ."; gap: 5px; pointer-events: none; }
 .zoom-bar .zoom { pointer-events: auto; }

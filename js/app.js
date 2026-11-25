@@ -753,10 +753,21 @@ function panelHTML(c) {
     const w = g.winner;
     const parts = i => {
       const t = g.vLevel.filter((l, v) => l === 1 && g.vOwner[v] === i).length, ci = g.vLevel.filter((l, v) => l === 2 && g.vOwner[v] === i).length;
-      return [t && `${t} town${t > 1 ? 's' : ''}`, ci && `${ci} cit${ci > 1 ? 'ies' : 'y'} (${ci * 2})`, g.longest.p === i && 'Longest road (2)', g.army.p === i && 'Largest army (2)', g.players[i].vpCards && `${g.players[i].vpCards} point card${g.players[i].vpCards > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
+      return [t && `${t} town${t > 1 ? 's' : ''}`, ci && `${ci} cit${ci > 1 ? 'ies' : 'y'} (${ci * 2})`, g.longest.p === i && 'Longest road (2)', g.army.p === i && 'Largest army (2)'].filter(Boolean).join(' · ');
+    };
+    // what each player was holding when it ended: hidden points, cards, dev cards (Tim 2026-11-25:
+    // "show how many hidden victory points each player had and what was in each player's hand")
+    const held = i => {
+      const h = g.hands && g.hands[i], hv = g.players[i].vpCards || 0;
+      const hid = `<span class="hv${hv ? '' : ' zero'}" title="Hidden point cards">${hv} hidden</span>`;
+      if (!h) return hid;
+      const res = h.res.some(n => n) ? h.res.map((n, r) => n ? `<span class="hc" aria-label="${RES_NAME[r]} ${n}">${resIcon(r)}<b>${n}</b></span>` : '').join('') : '<span>no cards</span>';
+      const cnt = {}; h.dev.filter(k => k !== 'V').forEach(k => { cnt[k] = (cnt[k] || 0) + 1; });
+      const dev = Object.keys(cnt).map(k => `<span class="dv">${DEV_NAME[k]}${cnt[k] > 1 ? ' ×' + cnt[k] : ''}</span>`).join('');
+      return hid + res + dev;
     };
     const rows = g.players.map((Q, i) => ({ i, vp: E.publicVP(g, i) + (Q.vpCards || 0) })).sort((a, b) => b.vp - a.vp)
-      .map(x => `<div class="seat endrow"><i style="background:${colorOf(x.i)}"></i><span class="grow">${esc(g.players[x.i].name)}${x.i === w ? ' · winner' : ''}<span class="small muted bd">${parts(x.i)}</span></span><b class="num">${x.vp}</b></div>`).join('');
+      .map(x => `<div class="seat endrow"><i style="background:${colorOf(x.i)}"></i><span class="grow">${esc(g.players[x.i].name)}${x.i === w ? ' · winner' : ''}<span class="small muted bd">${parts(x.i)}</span><span class="eh small">${held(x.i)}</span></span><b class="num">${x.vp}</b></div>`).join('');
     return `<div class="phase">${head(w === seat ? 'You win!' : esc(g.players[w].name) + ' wins', `<button class="btn primary sm" id="againBtn">New game</button>`)}${rows}
       <button class="btn sm block" id="diceBtn" style="margin-top:8px">Dice this game</button></div>`;
   }
