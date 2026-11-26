@@ -17,14 +17,23 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} },
 };
-const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, oddsAll: false, weighted: false, mine: false, advisor: false, netName: '',
+const S = Object.assign({ n: 4, seats: ['human', 'medium', 'medium', 'medium', 'medium', 'medium'], board: 'random', speed: 'normal', spotOdds: true, oddsAll: false, weighted: false, mine: false, advisor: false, netName: '', assists: {},
   friendly: false, balanced: false, vp: 10 }, store.get('catan.settings', {}));
 while (S.seats.length < 6) S.seats.push('medium');
 if (![3, 4, 5, 6].includes(S.n)) S.n = 4;
 if (!(S.vp >= 8 && S.vp <= 13)) S.vp = 10;
 if (!ONLINE) S.seats = S.seats.map(s => (s === 'online' ? 'medium' : s));
 // the rules a new game starts with (house rules are off by default, set in Settings)
-const gameRules = () => ({ board: S.board, vp: S.vp, friendly: !!S.friendly, balanced: !!S.balanced });
+const gameRules = () => Object.assign({ board: S.board, vp: S.vp, friendly: !!S.friendly, balanced: !!S.balanced }, assistsRule());
+// "Allowed" helpers, chosen when a new game starts and the same for every player (Tim 2026-11-25: "select if the
+// players (including you) can turn on each specific setting ... so that if you wanted to play a non-assisted game
+// you could"). Stored in the game's rules (rules.assists, only the ones switched off), so online rooms enforce it
+// for everyone. Each player's own switches still decide what they see among the allowed ones.
+const ASSISTS = [['odds', 'Odds'], ['weighted', 'Weighted'], ['advisor', 'Advisor'], ['table', 'Table'], ['chart', 'Dice chart']];
+const assistsRule = () => { const off = {}; ASSISTS.forEach(([k]) => { if (S.assists && S.assists[k] === false) off[k] = false; }); return Object.keys(off).length ? { assists: off } : {}; };
+const allowed = k => !(app.allow && app.allow[k] === false);
+const LEVER_ASSIST = { spotOdds: 'odds', weighted: 'weighted', mine: 'weighted', advisor: 'advisor' };
+const opt = k => !!S[k] && allowed(LEVER_ASSIST[k] || k); // a personal switch, if this game allows it
 const saveSettings = () => store.set('catan.settings', S);
 // In-person play (iframe) can flip "Advisor" too: pick it up so a later save here doesn't undo it
 addEventListener('storage', e => {
@@ -100,6 +109,7 @@ let toastT = 0;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2400); }
 const why = key => `<button class="q" data-why="${key}" aria-label="Why?">?</button>`;
 const WHY = {
+  assists: ['Allowed', 'Helpers anyone in this game may turn on, the same for every player and every online friend. Switch them all off for a game with no help. Each player still chooses which allowed ones they see.'],
   game: ['How to play', 'Roll, collect from tiles next to your towns, build. Road = wood + brick. Town = wood, brick, sheep, wheat. City = 2 wheat + 3 ore. Card = sheep, wheat, ore. First to 10 points wins. A 7 moves the robber: anyone with more than 7 cards gives back half.'],
   oddsAll: ['Red odds', 'Off: corners under 7 dots show no number, since they are rarely worth a town. On: every open corner shows its number. Applies to In-person play too.'],
   odds: ['Spot odds', 'Numbers on open corners add up the dots of the tiles around them (a 6 or 8 is 5 dots, a 2 or 12 is 1). Each dot is one roll in 36, the same count as In-person play.'],
@@ -203,11 +213,11 @@ function drawLive(c) {
     h += g.vLevel[v] === 2 ? city(x, y, colorOf(o)) : house(x, y, 0.27, 'bld', colorOf(o));
   });
   // what I may tap now
-  const hl = targets(c), wNow = weightsFor(g, me), adv = S.spotOdds ? advisorFor(g, me) : null;
+  const hl = targets(c), wNow = weightsFor(g, me), adv = opt('spotOdds') ? advisorFor(g, me) : null;
   const spotVal = v => (adv && adv[v] != null ? Math.round(adv[v]) : spotPips(g, v, wNow));
   // Odds on: when not placing a town, every open corner still shows its number (look-only, taps pass through)
   // badges are small and have no coloured ring (Tim 2026-11-24: "making the odds circles smaller and removing the red circle")
-  if (S.spotOdds && hl.kind !== 'settle') g.vOwner.forEach((o, v) => {
+  if (opt('spotOdds') && hl.kind !== 'settle') g.vOwner.forEach((o, v) => {
     if (!openCorner(g, v)) return;
     const [x, y] = pt(v), odds = spotVal(v);
     if (!ART.oddsShown(odds, S.oddsAll)) return; // summarized: red corners hidden (Tim 2026-11-25)
@@ -222,7 +232,7 @@ function drawLive(c) {
     const [x, y] = pt(v);
     // a number only where a town may really go: empty corner, no building one road away
     // Odds off: a small soft dot marks the spot instead of an empty white circle; the tap circle stays full size
-    let odds = S.spotOdds && hl.kind === 'settle' && openCorner(g, v) ? spotVal(v) : '';
+    let odds = opt('spotOdds') && hl.kind === 'settle' && openCorner(g, v) ? spotVal(v) : '';
     if (odds !== '' && !ART.oddsShown(odds, S.oddsAll)) odds = ''; // red corners: just the dot
     h += `<g class="hl-v" data-v="${v}">${odds !== '' ? ART.oddsBadge(x, y, U, odds) : `<circle cx="${x}" cy="${y}" r="${0.11 * U}" class="hl-dot"/>`}<circle cx="${x}" cy="${y}" r="${0.42 * U}" class="hit"/></g>`;
   });
@@ -248,7 +258,7 @@ function canBuild(g, seat) {
 }
 function adviceFor(c) {
   const { g, seat } = c, AD = window.CatanAdvice;
-  if (!S.advisor || seat < 0 || !AD || !g.players[seat] || g.phase === 'over') return null;
+  if (!opt('advisor') || seat < 0 || !AD || !g.players[seat] || g.phase === 'over') return null;
   const P = g.players[seat];
   const key = [g.logN, seat, g.phase, g.sub, g.step, g.turn, app.mode, g.vOwner.join(), g.vLevel.join(), g.eOwner.join(), String(P.res), g.deck, g.freeRoads].join('|');
   if (advice.key === key) return advice.val;
@@ -295,8 +305,8 @@ function ownDots(g, seat) {
   return own;
 }
 function weightsFor(g, seat) {
-  if (!S.weighted) return null;
-  if (!S.mine || seat < 0) return W.weights(boardTot(g));
+  if (!opt('weighted')) return null;
+  if (!opt('mine') || seat < 0) return W.weights(boardTot(g));
   const open = W.openDots(g.vOwner.map((_, v) => ({ open: openCorner(g, v), hexes: cornerHexes(g, v) })));
   return W.personal(ownDots(g, seat), open, boardTot(g));
 }
@@ -307,7 +317,7 @@ const spotPips = (g, v, w) => (w ? Math.round(W.weightedSum(cornerHexes(g, v), w
 // so a board can be judged before committing to it (Tim 2026-11-25: "allow the weighted or odds displays to be
 // shown on the board before you actually start the game")
 function previewOdds(g) {
-  if (!S.spotOdds) return '';
+  if (!opt('spotOdds')) return '';
   const w = weightsFor(g, 0), adv = advisorFor(g, 0);
   let h = '';
   g.vOwner.forEach((o, v) => {
@@ -317,7 +327,7 @@ function previewOdds(g) {
   return h;
 }
 function advisorFor(g, seat) {
-  if (!S.advisor || seat < 0 || !window.CatanAdvisor) return null;
+  if (!opt('advisor') || seat < 0 || !window.CatanAdvisor) return null;
   const A = window.CatanAdvisor;
   return A.scores(Object.assign(A.fromEngine(g, G, E.pips), { me: seat })).score;
 }
@@ -796,11 +806,11 @@ function offerText(g, o, me) {
 }
 // spot odds on/off right where you place a town (same setting as the Settings switch)
 // plus "Weighted": the same numbers counted by how scarce each resource is (also in Settings)
-const lever = (key, label) => `<label class="odds-lever">${label}<span class="switch sm"><input type="checkbox" data-lever="${key}" ${S[key] ? 'checked' : ''}><span></span></span></label>`;
+const lever = (key, label) => !allowed(LEVER_ASSIST[key] || key) ? '' : `<label class="odds-lever">${label}<span class="switch sm"><input type="checkbox" data-lever="${key}" ${S[key] ? 'checked' : ''}><span></span></span></label>`;
 // "Mine" shows only while Weighted is on
 // "Advisor" sits after them (its own setting; it does not need Weighted). The one-line strip beside the dice
 // in road/town mode has no room for a fourth switch, so it leaves Advisor out (Settings and the dots table have it).
-const wLevers = (adv = true) => `${lever('weighted', 'Weighted')}${S.weighted ? lever('mine', 'Mine') : ''}${adv ? lever('advisor', 'Advisor') : ''}`;
+const wLevers = (adv = true) => `${lever('weighted', 'Weighted')}${opt('weighted') ? lever('mine', 'Mine') : ''}${adv ? lever('advisor', 'Advisor') : ''}`;
 const levers = (adv = true) => `${lever('spotOdds', 'Odds')}${wLevers(adv)}`;
 // the few seconds between the winning play and the end screen: the table stays as it was
 const FINALE_MS = 5000, FINALE_FAST = 2500;
@@ -847,7 +857,7 @@ function panelHTML(c) {
     return `<div class="phase"><div class="row">${diceHTML(g)}<div class="grow"><div class="h hs">${t}</div>${status}</div></div>${o ? `<div class="offer small">${offerText(g, o, seat)}</div>` : ''}</div>`;
   }
   switch (g.phase) {
-    case 'setup': return `<div class="phase">${head(g.sub === 'settle' ? 'Place a town' : 'Place a road', `<span class="levers">${levers()}</span>`)}<div class="small muted">${g.sub === 'settle' ? (g.step >= g.n ? 'Your second town pays its tiles now.' : S.spotOdds ? (S.advisor ? 'Numbers show Advisor scores.' : 'Numbers show each corner\'s dots.') :'Tap a glowing corner.') : 'Next to the town you just placed.'}${g.sub === 'settle' ? why('odds') : ''}</div></div>`;
+    case 'setup': return `<div class="phase">${head(g.sub === 'settle' ? 'Place a town' : 'Place a road', `<span class="levers">${levers()}</span>`)}<div class="small muted">${g.sub === 'settle' ? (g.step >= g.n ? 'Your second town pays its tiles now.' : opt('spotOdds') ? (opt('advisor') ? 'Numbers show Advisor scores.' : 'Numbers show each corner\'s dots.') :'Tap a glowing corner.') : 'Next to the town you just placed.'}${g.sub === 'settle' ? why('odds') : ''}</div></div>`;
     case 'roll': {
       const kn = E.playable(g, seat, 'K') > 0 && !g.devUsed;
       return `<div class="phase"><div class="row">${diceHTML(g)}<button class="btn warm grow big-btn" id="rollBtn">Roll</button>${kn ? '<button class="btn" data-dev="K">Knight first</button>' : ''}</div>${status}</div>`;
@@ -914,6 +924,7 @@ function newGamePanel() {
     <div style="margin-top:6px">${rows}</div>
     ${n >= 5 ? `<div class="small muted" style="margin-top:8px">Big board · extra build step after each turn ${why('big')}</div>`
       : `<div class="seg" id="boardSeg" style="margin-top:8px" aria-label="Board">${[['random', S.balanced ? 'Balanced board' : 'Random board'], ['beginner', 'Beginner board']].map(([k, l]) => `<button aria-pressed="${S.board === k}" data-board="${k}"${k === 'random' && S.board === k ? ' aria-label="Deal a new random board"' : ''}>${l}${k === 'random' && S.board === k ? ' <span class="reroll" aria-hidden="true">↻</span>' : ''}</button>`).join('')}</div>`}
+    <div class="ng-al"><span class="small muted">Allowed ${why('assists')}</span>${ASSISTS.map(([k, l]) => `<button class="chip" data-assist="${k}" aria-pressed="${!(S.assists && S.assists[k] === false)}">${l}</button>`).join('')}</div>
     <div class="ng-lv">${levers()}</div>
     ${houseLine() ? `<div class="small muted" style="margin-top:6px">House rules: ${houseLine()} · <button class="link" data-tab-go="settings">change</button></div>` : ''}
   </div>${ONLINE ? `
@@ -1032,7 +1043,7 @@ function chartHTML(g) {
   return `<div class="chart"><div class="plot">${bars}${ART.diceCurve(max)}</div><div class="lbls">${lbls}</div></div><div class="small muted"><i class="key a"></i> rolled % <i class="key t"></i> expected (n/36, as in In-person play) · ${g.rolls.reduce((a, b) => a + b, 0)} rolls</div>`;
 }
 // phone: the dice box, with everyone's cards under it; kept current by render() while open
-const diceLiveHTML = c => `${chartHTML(c.g)}<div class="sep"></div>${dotsHTML(c)}<div class="sep"></div>${handsHTML(c)}`;
+const diceLiveHTML = c => `${allowed('chart') ? chartHTML(c.g) + '<div class="sep"></div>' : ''}${allowed('table') ? dotsHTML(c) + '<div class="sep"></div>' : ''}${handsHTML(c)}`;
 function diceSheet(c) {
   openSheet(`<div class="sheet-h"><span class="h">Dice this game</span><button class="btn sm ghost" data-close>Close</button></div><div id="diceLive">${diceLiveHTML(c)}</div>`);
 }
@@ -1091,8 +1102,8 @@ function dotsHTML(c, cards) {
 // with past history is necessary"); the one-line latest event in the panel still opens the full log.
 function sideHTML(c) {
   const { g } = c;
-  return `<div class="phase side-only" id="dotsBox">${dotsHTML(c, true)}</div>
-    <div class="phase side-only side-chart"><div class="cap">Dice this game</div>${chartHTML(g)}</div>`;
+  return (allowed('table') ? `<div class="phase side-only" id="dotsBox">${dotsHTML(c, true)}</div>` : '')
+    + (allowed('chart') ? `<div class="phase side-only side-chart"><div class="cap">Dice this game</div>${chartHTML(g)}</div>` : '');
 }
 
 // ------------------------------------------------------------ settings
@@ -1135,6 +1146,7 @@ function renderMain() {
   if (app.tab === 'settings') { renderSettings(); return; }
   const c = current();
   const lobby = app.net && (app.net.status === 'lobby' || app.net.status === 'joining');
+  app.allow = c && !lobby ? (c.g.rules && c.g.rules.assists) || null : S.assists; // the game's allowed helpers (new-game panel: yours)
   document.body.classList.toggle('at-table', !!c && !lobby);
   // the winning play stays on the normal table for a few seconds before the end screen
   // (Tim 2026-11-25: "it instantly ends and zooms out really far ... slowed down and made the last play a little more dramatic")
@@ -1195,6 +1207,7 @@ function bindPanel() {
   const on = (sel, f) => document.querySelectorAll(sel).forEach(b => b.addEventListener('click', e => f(b, e)));
   on('#nPl [data-n]', b => { S.n = +b.dataset.n; saveSettings(); render(); });
   on('[data-tab-go]', b => goTab(b.dataset.tabGo, true));
+  on('[data-assist]', b => { const k = b.dataset.assist; S.assists = Object.assign({}, S.assists); if (S.assists[k] === false) delete S.assists[k]; else S.assists[k] = false; saveSettings(); render(); });
   on('#boardSeg [data-board]', b => { if (b.dataset.board === 'random' && S.board === 'random') { app.boardSeed = newBoardSeed(); FX.play('shuffle'); } S.board = b.dataset.board; saveSettings(); render(); });
   document.querySelectorAll('[data-seat]').forEach(sel => sel.addEventListener('change', () => { S.seats[+sel.dataset.seat] = sel.value; saveSettings(); render(); }));
   document.querySelectorAll('[data-lever]').forEach(sw => sw.addEventListener('change', () => setSetting(sw.dataset.lever, sw.checked)));

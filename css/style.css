@@ -47,6 +47,11 @@ body.at-table .board-wrap { max-height: calc(100dvh - var(--head) - var(--tabh) 
 /* end screen: the board keeps its in-game size (it used to shrink here, Tim 2026-11-25: "zooms out really far"); one-line score rows */
 .phase .seat.endrow { min-height: 0; padding: 4px 0; } .seat.endrow .bd { display: inline; margin-left: 6px; }
 .ng-lv { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+/* "Allowed" helpers for this game (same look as the .seg buttons; off = struck through) */
+.ng-al { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
+.ng-al > .small { margin-right: 4px; display: inline-flex; align-items: center; gap: 4px; }
+.ng-al .chip { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; color: var(--muted); font-weight: 650; font-size: 13px; min-height: 30px; text-decoration: line-through; }
+.ng-al .chip[aria-pressed="true"] { background: var(--card-hover); color: var(--text); text-decoration: none; }
 #boardSeg .reroll { margin-left: 3px; font-weight: 700; }
 /* end screen: what each player held (hidden points, cards, dev cards) */
 .seat.endrow .eh { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; margin-top: 2px; color: var(--muted); font-size: 11.5px; }
