@@ -21,3 +21,10 @@
 - **Verified:** 42/42 `node --test "tests/*.test.*"`; builders' phone-view WebKit 393 px + 1440 px no page/sideways scroll; ui.tracker-save.mjs (save/reload/undo); real online room laptop + headless phone, 12 rolls; my smoke phone-view of merged main: no errors. Live c3d2289.
 - **Open:** real iPhone; 320 px for in-person.
 - **Later same day (75d0fc4):** Tim: "don't remove the probability tiles when you're supposed to build a road"; "show the totals probability points of each resource in online play, just like for each user"; "Make it very similar to in-person play". Built: odds badges on every open corner whenever Odds is on (look-only during road placement); `dotsHTML` dots table = In-person layout (Weighted switch, icon header, bold Table row, colour dot + towns per player, grey zeros, bold all) + cards column on laptop side (replaced hands box); phone has it in the Dice sheet. 6p feed shows 2 lines so it fits 1280×800. Verified: 42/42 tests; ui-check 4p + 6p all 5 sizes, no page scroll, no errors.
+
+## 2026-11-27 — fit pass (builder, manager brief)
+- **Asked (Tim, all games):** "make sure that the user can actually see the full screen and everything" — spacing/sizing only, no restyle.
+- **Found (new tests/fit-ui.mjs, crowded 4p + 6p: long names, 20 cards, 5 dev kinds, LR/LA held):** phone/320/sideways dev row scrolled off the side (Monopoly cut, Victory point hidden); LR/LA badges clipped away on phones; with 3 opponents the knights number was cut; 320 px 6p names showed 2 letters. Laptop already fine.
+- **Built (style.css v22, CSS only):** dev cards share one row with two-line names (<900 px); "next turn" = tag on the card edge; LR/LA = tag on the opponent's colour bar (<900 px); 320 px tighter seats, colour dot hidden in 5-opponent row.
+- **Verified:** fit-ui 4p + 6p all 5 sizes green (failed on old code); 68/68 unit tests; ui-check 4p 5 sizes no scroll/errors.
+- **Open:** real iPhone; 320 px board numbers still 8.5–9.5 px (zoom button, unchanged).

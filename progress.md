@@ -1,7 +1,7 @@
 # Catan: progress
 
 ## START HERE
-Last updated 2026-11-25 (53/53 `node --test "tests/*.test.*"`; Advisor merged). Versions now style.css v14, app.js v19, advisor v1, board-art v3, engine v4, ai v3, tracker.html?v=7. Trap: builders twice left stray edits in the MAIN checkout (engine.js, tests/advisor.test.js); check `git status` before merging a branch. Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
+Last updated 2026-11-27 (fit pass, style v22, 68/68 tests). Earlier: 2026-11-25 (53/53 `node --test "tests/*.test.*"`; Advisor merged). Versions now style.css v14, app.js v19, advisor v1, board-art v3, engine v4, ai v3, tracker.html?v=7. Trap: builders twice left stray edits in the MAIN checkout (engine.js, tests/advisor.test.js); check `git status` before merging a branch. Read this file, then `CLAUDE.md` (file map, tests, traps), then `chat.md`.
 
 ## Goal right now
 Catan is a playable base game vs computer, 3–6 players, with online rooms (friend codes, ON since 2026-10-27, Tim's go: "enable it to all games for now and we can disable it later if it becomes too much"). Wave 3 (2026-10-28, Tim: "Just make the games better") added 5–6 players, house-rule options and Learn videos.
@@ -22,6 +22,7 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 | **Online play extras** (2026-11-24) | Odds + Weighted switches in the "Place a town"/"Place a road" heading and main-phase road mode (also in Settings); harbour tokens turned square to the coast (0 covered); no odds on blocked corners; ◀ undoes UI choices + own local-game builds/trades until anyone moves, greyed otherwise (online.js has no take-back) |
 | **Online odds while building roads** (75d0fc4) | With Odds on, every open corner shows its dots whenever you're not placing a town (look-only `.odds-p`, `pointer-events:none`) |
 | **Online dots table** (75d0fc4) | `dotsHTML(c, cards)` in app.js = In-person summary layout: Weighted switch, icon header, bold warm Table row (×weights when Weighted), per player colour dot + towns, grey zeros, bold all; laptop side box `#dotsBox` adds a cards-held column (replaced the hands box); phone: in the Dice sheet between chart and hands. Player dots: city ×2, robber tile 0, × weight when on. Feed shows `8 - n` lines at 5–6p so 6p fits 1280×800 |
+| **Fit pass 2026-11-27** | Crowded 4p/6p (long names, 20 cards, 5 dev kinds, LR/LA) fits at 393/320/sideways/1280/1440: `node tests/fit-ui.mjs <url> <outDir> [4|6] [only]` (all green). style.css v22 |
 | Online rooms (`_online` v2) | **ON** (`ONLINE=true` in app.js). ~507 writes / 1,120 reads per 4p game (kit harness). 5–6p cost not measured. |
 
 ## Authorized next steps
@@ -51,6 +52,7 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 - See `CLAUDE.md` Traps (online cost, log `n` field, kit copies byte-identical).
 
 ## Decisions
+- 2026-11-27 (fit pass) Tim: "make sure that the user can actually see the full screen and everything". Phones (<900 px): dev cards share one row (flex 1 1 0, two-line names, 11.5 px; 10.5 px at 320) instead of scrolling off the side, so with few cards they're wider; "next turn" and Longest road/Largest army are small tags on the card's top edge (no extra height; the phone panel has no spare height). 320 px: tighter opponent spacing, and with 5 opponents the colour dot hides (the colour bar shows it). My choices: tag placement, two-line names.
 - 2026-11-25 (advice branch) Tim: "if the advisor setting is turned on, I want there to be suggestions for many different decisions ... gold circle ... silver circle". Online play only, your seat, Advisor on: `js/advice.js` (pure, rules in its header) + rings drawn in app.js `ringsSVG`. Setup town: gold pair = best (town now + likely 2nd town after opponents' predicted picks), silver pair = best with another first town; last town = gold/silver single. Opponents placing before your next town: dashed ring in their colour (greedy, Advisor score from their seat). Setup road / road mode / Road Building: gold+silver ring at the 2 best edge midpoints (progress to targets ×1.5 if an opponent is ≤1 road away, +0.5×block, +longest road). Outside setup: gold/silver on the #1/#2 "next upgrade" (city = Mine-weighted pips; town ≤2 roads = (score+port+2)×[1,.7,.5]×1.25 race). Build buttons: 2px gold/silver outline on the top 2 affordable picks. Opponent rings dashed (my choice: White #ece6d8 ≈ silver). Cached per state; 6p first pick ~20 ms in WebKit, others ≤8 ms. tests/advice.test.js (6), 65 tests. Versions: style v19, app v23, advice v1, tracker ?v=9.
 - 2026-11-25 (b4db8b7) Tim: "when a number is rolled that the robber is on that tile, show a little blocked sign with the roll". `robbed(g,t)` (roll ≠ 7, robber tile has that number and a town on it) → red circle-slash after the sum in the dice overlay and beside the panel dice; robber hex ringed at Normal speed. In-person has no robber, not changed.
 - 2026-11-25 (trade-once merge) Tim: "sometimes the AI try to offer the same trade twice in one turn". Cause: Hard computers make up to 2 offers/turn and rebuilt the refused one. Engine keeps `st.offered` (keys `E.offerKey(give,get)`, reset in nextTurn); AI skips offers already made. Engine does NOT reject human repeats. Test tests/trade-once.test.js (before: 199/800 repeats in 200 games; after 0). Win rates unchanged.
@@ -79,6 +81,7 @@ Catan is a playable base game vs computer, 3–6 players, with online rooms (fri
 - 2026-10-28 "of N" shown next to your points when points-to-win isn't 10; phone seats hide dev/knight counts in 5–6p games.
 
 ## NOT verified
+- Fit pass (2026-11-27): only headless WebKit; 320 px board numbers stay 8.5 (6p) / 9.5 (4p) px (zoom button); 6p names at 320 px show ~4 letters + colour bar. Discard/trade sheets in the crowded state not re-measured (ui-check normal state sheet fits).
 - Real iPhone (Safari engine at 393 only). Sounds not heard by a person.
 - Online play on two real iPhones; a 5–6 seat online room only in the local `_online` test, not on real Firestore. 5–6p Firestore cost per game not measured (more seats = more writes).
 - Pass-the-phone with 2+ people only lightly checked headless.
