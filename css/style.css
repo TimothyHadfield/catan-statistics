@@ -251,6 +251,18 @@ button.rc { font: inherit; padding: 0; cursor: pointer; }
 .devc small { font-size: 10.5px; font-weight: 500; opacity: .9; }
 .devc.vp { border-color: #b89545; background: linear-gradient(#4a3d1f, #2f2712); color: #ffe7a8; }
 @media (min-width: 900px) { .hand { flex: none; } .rc { width: 60px; height: 76px; flex: none; max-width: none; } .rc .ri { width: 32px; height: 32px; } .rc b { font-size: 18px; } .myvp { width: 60px; height: 76px; } .devs { margin-top: 0; flex-wrap: wrap; max-width: 300px; } }
+/* fit pass 2026-11-27: phone/landscape dev cards share the row (two-line names) instead of scrolling
+   off the side; only if even that can't fit do they wrap to a second row */
+@media (max-width: 899px) {
+  .devs { flex-wrap: wrap; overflow: visible; }
+  .devc { flex: 1 1 0; min-width: min-content; display: block; padding: 2px 4px; font-size: 11.5px; line-height: 1.05; text-align: center; }
+  .devc b { font-size: 12.5px; margin-left: 3px; }
+  /* "next turn" is a tag on the card's top edge, so a just-bought card doesn't make the row taller */
+  .devc { position: relative; }
+  .devs:has(small) { margin-top: 10px; }
+  .devc small { position: absolute; top: -12px; right: 2px; font-size: 10px; line-height: 12px; padding: 0 3px; border-radius: 4px; background: #2a2140; border: 1px solid #7f6aa5; white-space: nowrap; }
+}
+@media (max-width: 360px) { .devs { gap: 4px; } .devc { font-size: 10.5px; padding: 2px; -webkit-hyphens: auto; hyphens: auto; } }
 
 /* ---------- panel building blocks ---------- */
 .phase { background: rgba(15,17,23,.9); border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 11px; }
@@ -426,6 +438,23 @@ table.str th { color: var(--muted); font-weight: 650; font-size: 12px; }
 .seats.many .opp-s .vp { font-size: 16px; }
 @media (max-width: 430px), (max-height: 500px) { .seats.many .ct ~ .ct { display: none !important; } }
 @media (max-width: 360px) { #nPl .pl { display: none; } }
+/* fit pass 2026-11-27: on phones Longest road / Largest army often didn't fit beside the numbers and were
+   clipped away (with 3 opponents they also cut off the knights number): they sit as a tag on the card's
+   colour bar instead (no extra height) */
+@media (max-width: 899px) {
+  .seats .opp { position: relative; }
+  .seats .opp-s, .seats.many .opp-s { overflow: visible; }
+  .seats:not(.many) .opp-s { gap: 6px; }
+  .seats .opp-s .aw { position: absolute; top: -8px; right: 3px; line-height: 13px; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+  .seats .opp-s .aw + .aw { right: 26px; }
+  /* 3 opponents: the H/M/E badge sits at the right of the name, so the tags go left of it */
+  .seats:not(.many) .opp-s .aw { right: 34px; } .seats:not(.many) .opp-s .aw + .aw { right: 57px; }
+}
+/* 320 px and sideways with 5 opponents: the colour bar names the colour, so the dot goes and the name gets its room */
+@media (max-width: 360px), (max-height: 500px) { .seats.many .opp-n .pc { display: none; } }
+/* 320 px with 3 opponents: the same tighter spacing the 5-opponent row uses, so the knights number fits */
+@media (max-width: 360px) { .seats:not(.many) { gap: 4px; padding: 6px 6px 0; } .seats:not(.many) .opp { padding: 1px 4px 2px; } .seats:not(.many) .opp-s { gap: 4px; font-size: 13px; } .seats:not(.many) .opp-s .vp { font-size: 16px; } }
+@media (max-width: 360px) { .seats .opp-n .pc { display: none; } }
 @media (min-width: 900px) { .seats.many .opp-n .lv { display: inline; } }
 /* settings sub-lines, rules videos */
 .set-row .sub { display: block; font-size: 12px; color: var(--muted); line-height: 1.3; }
